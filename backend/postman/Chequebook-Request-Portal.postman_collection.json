@@ -1,0 +1,132 @@
+{
+  "info": {
+    "_postman_id": "2b6ce43d-6eb8-49e8-9e80-c0121a2cd108",
+    "name": "Chequebook Request Portal API",
+    "description": "JWT bearer authentication adapted from the bank reference service. Login stores access and refresh tokens in the selected environment. Select the login request for the role required by each workflow folder.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+  "event": [
+    { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["pm.request.headers.upsert({ key: 'X-Correlation-ID', value: pm.variables.replaceIn('postman-{{$guid}}') });"] } },
+    { "listen": "test", "script": { "type": "text/javascript", "exec": ["let body; try { body = pm.response.json(); } catch (e) {}", "if (body?.data?.accessToken) pm.environment.set('accessToken', body.data.accessToken);", "if (body?.data?.refreshToken) pm.environment.set('refreshToken', body.data.refreshToken);"] } }
+  ],
+  "variable": [
+    { "key": "testAccountNumber", "value": "0078901234" },
+    { "key": "requestNumber", "value": "CBR-2026-000001" },
+    { "key": "batchNumber", "value": "VEX-20260911-0000000000000" },
+    { "key": "userId", "value": "1" },
+    { "key": "roleId", "value": "1" },
+    { "key": "branchId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        { "name": "Login - CSO", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{csoEmail}}\",\n  \"password\": \"{{staffPassword}}\"\n}" }, "url": "{{baseUrl}}/auth/login" } },
+        { "name": "Login - BOM", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{BOMEmail}}\",\n  \"password\": \"{{staffPassword}}\"\n}" }, "url": "{{baseUrl}}/auth/login" } },
+        { "name": "Login - Operations", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{operationsEmail}}\",\n  \"password\": \"{{staffPassword}}\"\n}" }, "url": "{{baseUrl}}/auth/login" } },
+        { "name": "Login - Administrator", "request": { "auth": { "type": "noauth" }, "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}" }, "url": "{{baseUrl}}/auth/login" } },
+        { "name": "Refresh token", "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{refreshToken}}", "type": "string" }] }, "method": "POST", "url": "{{baseUrl}}/auth/refresh-token" } },
+        { "name": "Profile", "request": { "method": "GET", "url": "{{baseUrl}}/auth/profile" } },
+        { "name": "Logout", "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 200) { pm.environment.unset('accessToken'); pm.environment.unset('refreshToken'); }"] } }], "request": { "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{refreshToken}}", "type": "string" }] }, "method": "POST", "url": "{{baseUrl}}/auth/logout" } }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "description": "Read-only pending-action summary derived from the authenticated user's permissions and branch scope. Run the desired role login first.",
+      "item": [
+        {
+          "name": "Pending action summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Summary returned', () => pm.response.to.have.status(200));",
+                  "pm.test('Summary contract is valid', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.totalCount).to.be.a('number');",
+                  "  pm.expect(body.actions).to.be.an('array');",
+                  "  pm.expect(body.generatedAt).to.be.a('string');",
+                  "  body.actions.forEach(action => {",
+                  "    pm.expect(action.code).to.be.oneOf(['APPROVAL_REQUIRED', 'DEBIT_RETRY_REQUIRED', 'VENDOR_EXPORT_REQUIRED', 'VENDOR_SEND_REQUIRED', 'LIFECYCLE_UPDATE_REQUIRED']);",
+                  "    pm.expect(action.count).to.be.above(0);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/notifications/summary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CSO - Account and requests",
+      "item": [
+        { "name": "Account eligibility", "request": { "method": "GET", "url": "{{baseUrl}}/accounts/{{testAccountNumber}}/eligibility" } },
+        { "name": "Frozen account eligibility", "request": { "method": "GET", "url": "{{baseUrl}}/accounts/0098765432/eligibility" } },
+        { "name": "Create request", "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Request created', () => pm.response.to.have.status(200));", "if (pm.response.code === 200) pm.collectionVariables.set('requestNumber', pm.response.json().request.id);"] } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"accountNumber\": \"{{testAccountNumber}}\",\n  \"leafCount\": 50\n}" }, "url": "{{baseUrl}}/cheque-requests" } },
+        { "name": "List requests", "request": { "method": "GET", "url": "{{baseUrl}}/cheque-requests?page=0&pageSize=20&sort=newest" } },
+        { "name": "Request detail", "request": { "method": "GET", "url": "{{baseUrl}}/cheque-requests/{{requestNumber}}" } }
+      ]
+    },
+    {
+      "name": "BOM - Approval and debit",
+      "item": [
+        { "name": "Pending approvals", "request": { "method": "GET", "url": "{{baseUrl}}/approvals/pending" } },
+        { "name": "Confirmed failed debits", "request": { "method": "GET", "url": "{{baseUrl}}/approvals/debit-failures" } },
+        { "name": "Approve and debit", "request": { "method": "POST", "url": "{{baseUrl}}/cheque-requests/{{requestNumber}}/approve" } },
+        { "name": "Reject", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Customer mandate requires an update.\"\n}" }, "url": "{{baseUrl}}/cheque-requests/{{requestNumber}}/reject" } },
+        { "name": "Retry confirmed failed debit", "request": { "method": "POST", "url": "{{baseUrl}}/cheque-requests/{{requestNumber}}/debit/retry" } }
+      ]
+    },
+    {
+      "name": "Operations - Vendor and lifecycle",
+      "item": [
+        { "name": "Processing queue", "request": { "method": "GET", "url": "{{baseUrl}}/processing/queue" } },
+        { "name": "Eligible vendor requests", "request": { "method": "GET", "url": "{{baseUrl}}/vendor-exports/eligible-requests" } },
+        { "name": "Create vendor export", "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Export created', () => pm.response.to.have.status(200));", "if (pm.response.code === 200) pm.collectionVariables.set('batchNumber', pm.response.json().batchNumber);"] } }], "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"requestIds\": [\"{{requestNumber}}\"]\n}" }, "url": "{{baseUrl}}/vendor-exports" } },
+        { "name": "List vendor exports", "request": { "method": "GET", "url": "{{baseUrl}}/vendor-exports" } },
+        { "name": "Vendor export detail", "request": { "method": "GET", "url": "{{baseUrl}}/vendor-exports/{{batchNumber}}" } },
+        { "name": "Download vendor workbook", "request": { "method": "GET", "url": "{{baseUrl}}/vendor-exports/{{batchNumber}}/download" } },
+        { "name": "Confirm sent to vendor", "request": { "method": "POST", "url": "{{baseUrl}}/vendor-exports/{{batchNumber}}/confirm-sent" } },
+        { "name": "Mark printed", "request": { "method": "POST", "url": "{{baseUrl}}/cheque-requests/{{requestNumber}}/mark-printed" } },
+        { "name": "Mark dispatched", "request": { "method": "POST", "url": "{{baseUrl}}/cheque-requests/{{requestNumber}}/dispatch" } },
+        { "name": "Confirm branch receipt", "request": { "method": "POST", "url": "{{baseUrl}}/cheque-requests/{{requestNumber}}/receive-at-branch" } },
+        { "name": "Confirm customer delivery", "request": { "method": "POST", "url": "{{baseUrl}}/cheque-requests/{{requestNumber}}/deliver" } },
+        { "name": "Reconcile unknown debit", "request": { "method": "POST", "url": "{{baseUrl}}/cheque-requests/{{requestNumber}}/debit/reconcile" } }
+      ]
+    },
+    {
+      "name": "Reports and audit",
+      "item": [
+        { "name": "Request report", "request": { "method": "GET", "url": "{{baseUrl}}/reports/requests?from=2026-01-01&to=2026-12-31" } },
+        { "name": "Download report CSV", "request": { "method": "GET", "url": "{{baseUrl}}/reports/requests/export?from=2026-01-01&to=2026-12-31" } },
+        { "name": "Audit trail", "request": { "method": "GET", "url": "{{baseUrl}}/audit-events?page=0&pageSize=50" } }
+      ]
+    },
+    {
+      "name": "Administrator",
+      "item": [
+        { "name": "Change bootstrap password", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"{{adminPassword}}\",\n  \"newPassword\": \"{{newAdminPassword}}\"\n}" }, "url": "{{baseUrl}}/admin/account/change-password" } },
+        { "name": "List users", "request": { "method": "GET", "url": "{{baseUrl}}/admin/users" } },
+        { "name": "Get user", "request": { "method": "GET", "url": "{{baseUrl}}/admin/users/{{userId}}" } },
+        { "name": "Create LDAP-linked user", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"employeeId\": \"EMP-1001\",\n  \"email\": \"jane.doe@example.bank\",\n  \"fullName\": \"Jane Doe\",\n  \"branchCode\": \"02\",\n  \"roles\": [\"CSO\"]\n}" }, "url": "{{baseUrl}}/admin/users" } },
+        { "name": "Update LDAP-linked user", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"employeeId\": \"EMP-1001\",\n  \"email\": \"jane.doe@example.bank\",\n  \"fullName\": \"Jane Doe\",\n  \"branchCode\": \"02\",\n  \"roles\": [\"CSO\"]\n}" }, "url": "{{baseUrl}}/admin/users/{{userId}}" } },
+        { "name": "Deactivate user", "request": { "method": "POST", "url": "{{baseUrl}}/admin/users/{{userId}}/deactivate" } },
+        { "name": "Activate user", "request": { "method": "POST", "url": "{{baseUrl}}/admin/users/{{userId}}/activate" } },
+        { "name": "Assign user roles", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"roles\": [\"CSO\"]\n}" }, "url": "{{baseUrl}}/admin/users/{{userId}}/roles" } },
+        { "name": "List roles", "request": { "method": "GET", "url": "{{baseUrl}}/admin/roles" } },
+        { "name": "Update role permissions", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"permissions\": [\"VIEW_REPORTS\"]\n}" }, "url": "{{baseUrl}}/admin/roles/{{roleId}}/permissions" } },
+        { "name": "List branches", "request": { "method": "GET", "url": "{{baseUrl}}/admin/branches" } },
+        { "name": "Create branch", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"02\",\n  \"name\": \"Victoria Island\",\n  \"address\": \"23 Kofo Abayomi Street, Victoria Island, Lagos\",\n  \"sortCode\": \"561150075\"\n}" }, "url": "{{baseUrl}}/admin/branches" } },
+        { "name": "Deactivate branch", "request": { "method": "POST", "url": "{{baseUrl}}/admin/branches/{{branchId}}/deactivate" } }
+      ]
+    }
+  ]
+}

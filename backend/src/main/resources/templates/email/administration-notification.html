@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title th:text="${notificationTitle}">Administration Notification</title>
+  <style>
+    @media only screen and (max-width: 620px) {
+      .email-shell { width: 100% !important; }
+      .email-padding { padding-left: 20px !important; padding-right: 20px !important; }
+      .details-label, .details-value { display: block !important; width: 100% !important; }
+      .details-label { padding-bottom: 4px !important; }
+      .details-value { padding-top: 0 !important; }
+      .portal-button { display: block !important; text-align: center !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#f2f5f8; color:#172033; font-family:Arial, Helvetica, sans-serif; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;" th:text="${notificationMessage}">
+    An administrative change was made in the Chequebook Request Portal.
+  </div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%; background-color:#f2f5f8; border-collapse:collapse;">
+    <tr>
+      <td align="center" style="padding:28px 12px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" class="email-shell" style="width:600px; max-width:600px; background-color:#ffffff; border-collapse:collapse; border:1px solid #dce3ea; border-radius:12px; overflow:hidden;">
+          <tr>
+            <td class="email-padding" style="padding:26px 36px; background-color:#24225C; border-bottom:4px solid #00AFEF;">
+              <p style="margin:0 0 8px; color:#00AFEF; font-size:13px; font-weight:700; line-height:18px; letter-spacing:1px; text-transform:uppercase;">Chequebook Request Portal</p>
+              <h1 style="margin:0; color:#ffffff; font-size:25px; font-weight:700; line-height:34px;" th:text="${notificationTitle}">Administration Notification</h1>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-padding" style="padding:32px 36px 12px;">
+              <p style="margin:0 0 18px; color:#172033; font-size:16px; line-height:25px;">Hello <strong th:text="${recipientName}">Branch Operations Manager</strong>,</p>
+              <p style="margin:0; color:#435466; font-size:16px; line-height:25px;" th:text="${notificationMessage}">An administrative change was made.</p>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-padding" style="padding:20px 36px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%; border-collapse:separate; border-spacing:0; background-color:#f8fafc; border:1px solid #dce3ea; border-radius:8px;">
+                <tr>
+                  <td class="details-label" width="40%" style="padding:14px 16px; border-bottom:1px solid #e5eaf0; color:#647486; font-size:13px; font-weight:700; line-height:20px; text-transform:uppercase;" th:text="${entityType}">Record</td>
+                  <td class="details-value" width="60%" style="padding:14px 16px; border-bottom:1px solid #e5eaf0; color:#172033; font-size:15px; line-height:20px; word-break:break-word;" th:text="${entityReference}">Record reference</td>
+                </tr>
+                <tr>
+                  <td class="details-label" width="40%" style="padding:14px 16px; border-bottom:1px solid #e5eaf0; color:#647486; font-size:13px; font-weight:700; line-height:20px; text-transform:uppercase;">Affected Branch</td>
+                  <td class="details-value" width="60%" style="padding:14px 16px; border-bottom:1px solid #e5eaf0; color:#172033; font-size:15px; line-height:20px;" th:text="${affectedBranches}">001</td>
+                </tr>
+                <tr>
+                  <td class="details-label" width="40%" style="padding:14px 16px; border-bottom:1px solid #e5eaf0; color:#647486; font-size:13px; font-weight:700; line-height:20px; text-transform:uppercase;">Changed By</td>
+                  <td class="details-value" width="60%" style="padding:14px 16px; border-bottom:1px solid #e5eaf0; color:#172033; font-size:15px; line-height:20px; word-break:break-word;" th:text="${changedBy}">Administrator</td>
+                </tr>
+                <tr>
+                  <td class="details-label" width="40%" style="padding:14px 16px; color:#647486; font-size:13px; font-weight:700; line-height:20px; text-transform:uppercase;">Changed At</td>
+                  <td class="details-value" width="60%" style="padding:14px 16px; color:#172033; font-size:15px; line-height:20px;" th:text="${changedAt}">21 Oct 2026, 10:00 AM WAT</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-padding" style="padding:4px 36px 24px;">
+              <p style="margin:0 0 10px; color:#647486; font-size:13px; font-weight:700; line-height:20px; text-transform:uppercase;">Changes</p>
+              <ul style="margin:0; padding-left:20px; color:#172033; font-size:15px; line-height:24px;">
+                <li th:each="change : ${changes}" th:text="${change}">Branch address updated</li>
+              </ul>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-padding" style="padding:8px 36px 28px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                <tr>
+                  <td bgcolor="#00AFEF" style="border-radius:6px; background-color:#00AFEF;">
+                    <a class="portal-button" th:href="${portalUrl}" href="#" target="_blank" style="display:inline-block; padding:13px 22px; color:#24225C; font-size:15px; font-weight:700; line-height:20px; text-decoration:none; border-radius:6px;">Open Chequebook Portal</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-padding" style="padding:20px 36px; background-color:#EFF7FA; border-top:1px solid #00AFEF; border-bottom:1px solid #00AFEF;">
+              <p style="margin:0; color:#24225C; font-size:13px; line-height:21px;"><strong>Security notice:</strong> Sensitive GL account values and authentication credentials are not included in this email.</p>
+            </td>
+          </tr>
+          <tr>
+            <td class="email-padding" style="padding:24px 36px; background-color:#f8fafc; text-align:center;">
+              <p style="margin:0 0 5px; color:#24225C; font-size:13px; font-weight:700; line-height:20px;">Chequebook Request Portal</p>
+              <p style="margin:0; color:#758496; font-size:12px; line-height:19px;">This is an automated notification. Please do not reply to this email.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

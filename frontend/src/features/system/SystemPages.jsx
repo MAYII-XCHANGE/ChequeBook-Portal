@@ -1,0 +1,6 @@
+import { ArrowLeft, ShieldX } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Button } from '../../components/ui/Button';
+
+export function UnauthorizedPage() { return <div className="mx-auto flex min-h-[65vh] max-w-lg flex-col items-center justify-center text-center"><span className="grid h-16 w-16 place-items-center rounded-full bg-red-50"><ShieldX className="h-8 w-8 text-red-600" /></span><h1 className="mt-5 text-2xl font-bold text-ink">Access not authorized</h1><p className="mt-2 text-sm leading-6 text-slate-500">Your current role does not have permission to access this module. If you believe this is incorrect, contact your system administrator.</p><Link to="/dashboard" className="mt-6"><Button variant="secondary"><ArrowLeft className="h-4 w-4" />Back to dashboard</Button></Link></div>; }
+export function NotFoundPage() { return <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6 text-center"><p className="text-sm font-bold text-brand-700">404</p><h1 className="mt-2 text-3xl font-bold text-ink">Page not found</h1><p className="mt-2 text-slate-500">The page may have moved or no longer exists.</p><Link to="/dashboard" className="mt-6"><Button>Return to dashboard</Button></Link></div>; }
