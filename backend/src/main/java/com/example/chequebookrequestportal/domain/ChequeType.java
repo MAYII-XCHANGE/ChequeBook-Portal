@@ -6,7 +6,7 @@ import java.util.Arrays;
 public enum ChequeType {
     INDIVIDUAL_CURRENT("01", "Individual Current Account"),
     CORPORATE("02", "Corporate Account"),
-    MANAGERS_CHEQUE("03", "Manager's Cheque");
+    MANAGERS_CHEQUE("03", "Managers Cheque");
 
     private final String code;
     private final String label;

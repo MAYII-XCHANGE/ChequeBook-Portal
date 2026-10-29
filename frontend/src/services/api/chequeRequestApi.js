@@ -22,4 +22,9 @@ export const chequeRequestApi = {
       method: 'POST',
       body: JSON.stringify(confirmation),
     }),
+  confirmManagersChequeCustody: (id, confirmation) =>
+    apiRequest(`/cheque-requests/${encodeURIComponent(id)}/confirm-custody`, {
+      method: 'POST',
+      body: JSON.stringify(confirmation),
+    }),
 };

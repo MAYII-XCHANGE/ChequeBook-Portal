@@ -145,7 +145,8 @@ public class ChequeRequest extends BaseEntity {
     }
 
     private boolean isTerminal(RequestStatus s) {
-        return s == RequestStatus.REJECTED || s == RequestStatus.DELIVERED || s == RequestStatus.CANCELLED;
+        return s == RequestStatus.REJECTED || s == RequestStatus.DELIVERED
+                || s == RequestStatus.CUSTODY_CONFIRMED || s == RequestStatus.CANCELLED;
     }
 
     public String getRequestNumber() {

@@ -19,5 +19,6 @@ public enum RequestStatus {
     DISPATCHED,
     RECEIVED_BY_BRANCH,
     DELIVERED,
+    CUSTODY_CONFIRMED,
     CANCELLED
 }

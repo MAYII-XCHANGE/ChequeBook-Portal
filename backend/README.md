@@ -304,7 +304,7 @@ The `ADMIN` role must not:
 - Only successfully debited, approved and unexported requests are eligible.
 - The CSO must select and store one supported cheque type when creating the request: `01` (Individual Current
   Account) or `02` (Corporate Account). The portal does not infer this value from Finacle account ownership.
-- Manager's cheque type `03` is not supported in the current workflow.
+- Managers cheque type `03` is not supported in the current workflow.
 - Legacy requests may have a null cheque type after migration. They must be reviewed and backfilled before vendor
   export; otherwise export is blocked with `CHEQUE_TYPE_REQUIRED`.
 - Operations selects one or more eligible requests and generates an Excel batch.
@@ -1050,7 +1050,7 @@ These values must be configurable until formally confirmed:
 2. Final production charge values and whether core banking or the portal calculates the fee.
 3. Final core-banking transaction codes and narration format.
 4. A transaction-status enquiry endpoint for safely resolving unknown debit or reversal outcomes.
-5. Final Finacle validation/mapping rules for the user-selected `ChequeType`, support for Manager's cheque `03`,
+5. Final Finacle validation/mapping rules for the user-selected `ChequeType`, support for Managers cheque `03`,
    and the source/mapping rules for `SchemeCode`.
 6. Vendor sort-code transformation rule.
 7. Delivery SOL and delivery-address rules.

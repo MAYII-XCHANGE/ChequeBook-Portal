@@ -21,7 +21,7 @@ public class ManagersChequeAccountService {
 
     public AccountDetails resolve(String configuredAccount, String branchCode) {
         String lookupId = UUID.randomUUID().toString();
-        log.info("Manager's Cheque GAM enquiry request: lookupId={}, branchCode={}, configuredAccount={}",
+        log.info("Managers Cheque GAM enquiry request: lookupId={}, branchCode={}, configuredAccount={}",
                 lookupId, branchCode, mask(configuredAccount));
 
         List<AccountDetails> rows;
@@ -29,23 +29,23 @@ public class ManagersChequeAccountService {
             rows = lookup.findConfiguredAccount(configuredAccount);
         }
         catch (DataAccessException exception) {
-            log.error("Manager's Cheque GAM enquiry response: lookupId={}, branchCode={}, status=UNAVAILABLE",
+            log.error("Managers Cheque GAM enquiry response: lookupId={}, branchCode={}, status=UNAVAILABLE",
                     lookupId, branchCode, exception);
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "MANAGERS_CHEQUE_ENQUIRY_UNAVAILABLE",
-                    "The Manager's Cheque account could not be verified because Finacle is unavailable.", true);
+                    "The Managers Cheque account could not be verified because Finacle is unavailable.", true);
         }
 
         if (rows.isEmpty()) {
-            log.warn("Manager's Cheque GAM enquiry response: lookupId={}, branchCode={}, status=NOT_FOUND, rows=0",
+            log.warn("Managers Cheque GAM enquiry response: lookupId={}, branchCode={}, status=NOT_FOUND, rows=0",
                     lookupId, branchCode);
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "MANAGERS_CHEQUE_ACCOUNT_NOT_FOUND",
-                    "The configured Manager's Cheque account was not found for your branch.");
+                    "The configured Managers Cheque account was not found for your branch.");
         }
         if (rows.size() != 1) {
-            log.error("Manager's Cheque GAM enquiry response: lookupId={}, branchCode={}, status=AMBIGUOUS, rows={}",
+            log.error("Managers Cheque GAM enquiry response: lookupId={}, branchCode={}, status=AMBIGUOUS, rows={}",
                     lookupId, branchCode, rows.size());
             throw new ApiException(HttpStatus.CONFLICT, "MANAGERS_CHEQUE_ACCOUNT_AMBIGUOUS",
-                    "Multiple Manager's Cheque accounts matched the configured branch account.");
+                    "Multiple Managers Cheque accounts matched the configured branch account.");
         }
 
         AccountDetails row = normalize(rows.get(0));
@@ -53,11 +53,11 @@ public class ManagersChequeAccountService {
             validate(row, configuredAccount);
         }
         catch (ApiException exception) {
-            log.warn("Manager's Cheque GAM enquiry response: lookupId={}, branchCode={}, status=INVALID, code={}",
+            log.warn("Managers Cheque GAM enquiry response: lookupId={}, branchCode={}, status=INVALID, code={}",
                     lookupId, branchCode, exception.getCode());
             throw exception;
         }
-        log.info("Manager's Cheque GAM enquiry response: lookupId={}, branchCode={}, status=SUCCESS, rows=1, "
+        log.info("Managers Cheque GAM enquiry response: lookupId={}, branchCode={}, status=SUCCESS, rows=1, "
                         + "accountNumber={}, schemeCode={}, currency={}, accountOwnership={}",
                 lookupId, branchCode, mask(row.accountNumber()), row.schemeCode(), row.currency(),
                 row.accountOwnership());
@@ -75,11 +75,11 @@ public class ManagersChequeAccountService {
             invalid("Finacle returned a different account from the branch configuration.");
         if (blank(row.accountName()) || blank(row.accountOwnership()) || blank(row.schemeCode())
                 || blank(row.currency()))
-            invalid("Finacle returned incomplete Manager's Cheque account details.");
+            invalid("Finacle returned incomplete Managers Cheque account details.");
         if (!"O".equalsIgnoreCase(row.accountOwnership()))
-            invalid("Finacle did not return the required Manager's Cheque account ownership.");
+            invalid("Finacle did not return the required Managers Cheque account ownership.");
         if (!row.currency().matches("[A-Za-z]{3}"))
-            invalid("Finacle returned an invalid currency for the Manager's Cheque account.");
+            invalid("Finacle returned an invalid currency for the Managers Cheque account.");
     }
 
     private void invalid(String message) {

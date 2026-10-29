@@ -58,7 +58,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RequestService {
     private static final Logger log = LoggerFactory.getLogger(RequestService.class);
     private static final Set<RequestStatus> TERMINAL = EnumSet.of(RequestStatus.REJECTED, RequestStatus.DELIVERED,
-            RequestStatus.CANCELLED);
+            RequestStatus.CUSTODY_CONFIRMED, RequestStatus.CANCELLED);
     private final ChequeRequestRepository requests;
     private final EligibilityRepository eligibility;
     private final RequestHistoryRepository history;
@@ -134,15 +134,15 @@ public class RequestService {
             String configuredAccount = initiatingBranch.getManagersChequeAccount();
             if (configuredAccount == null || configuredAccount.isBlank())
                 throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "MANAGERS_CHEQUE_ACCOUNT_NOT_CONFIGURED",
-                        "A Manager's Cheque account has not been configured for your branch.");
+                        "A Managers Cheque account has not been configured for your branch.");
             if (!configuredAccount.matches("\\d{10}"))
                 throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "MANAGERS_CHEQUE_CONFIGURATION_INVALID",
-                        "The configured Manager's Cheque account must contain exactly 10 digits.");
+                        "The configured Managers Cheque account must contain exactly 10 digits.");
             accountNumber = configuredAccount;
             if (requests.existsByBranchCodeIgnoreCaseAndChequeTypeAndStatusNotIn(
                     initiatingBranch.getCode(), ChequeType.MANAGERS_CHEQUE, TERMINAL))
                 throw new ApiException(HttpStatus.CONFLICT, "ACTIVE_MANAGERS_CHEQUE_REQUEST_EXISTS",
-                        "Your branch already has an active Manager's Cheque request.");
+                        "Your branch already has an active Managers Cheque request.");
             if (requests.existsByAccountNumberAndStatusNotIn(accountNumber, TERMINAL))
                 throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE_REQUEST",
                         "An active chequebook request already exists for this account.");
@@ -204,14 +204,14 @@ public class RequestService {
                         + branchLabel(accountHomeBranchName, accountHomeBranchCode) + " and Initiating Branch is "
                         + branchLabel(branchName, branchCode) + "."
                 : managersCheque
-                        ? "Manager's Cheque request created from controlled branch and product configuration."
+                        ? "Managers Cheque request created from controlled branch and product configuration."
                         : "Request created after core-banking name enquiry succeeded.";
         creationNote += " Cheque type: " + chequeType.displayName() + ".";
         if (managersCheque)
             creationNote += " Customer debit is not required.";
         history.save(new RequestHistory(request, null, request.getStatus().name(), actor.getFullName(), creationNote));
         audit.record("REQUEST_CREATED", "CHEQUE_REQUEST", request.getRequestNumber(), managersCheque
-                ? "Manager's Cheque request created from controlled configuration."
+                ? "Managers Cheque request created from controlled configuration."
                 : "Cheque book request created after successful name enquiry; cheque type "
                         + chequeType.displayName() + ".");
         if (managersCheque)
@@ -390,9 +390,9 @@ public class RequestService {
         r.approve(actor);
         if (!r.requiresCustomerDebit()) {
             transition(r, RequestStatus.APPROVED, actor,
-                    "BOM approved Manager's Cheque request. Customer debit is not required; request is ready for vendor export.");
+                    "BOM approved Managers Cheque request. Customer debit is not required; request is ready for vendor export.");
             audit.record("MANAGERS_CHEQUE_APPROVED_NO_DEBIT", "CHEQUE_REQUEST", r.getRequestNumber(),
-                    "Manager's Cheque request approved without customer debit.");
+                    "Managers Cheque request approved without customer debit.");
             return Map.of("request", view(r));
         }
         Branch postingBranch = branchWithPostingAccounts(r);
@@ -514,7 +514,9 @@ public class RequestService {
         if (request.getStatus() != RequestStatus.DISPATCHED)
             invalidTransition(request);
         transition(request, RequestStatus.RECEIVED_BY_BRANCH, security.user(),
-                "Physical receipt confirmed by servicing branch CSO.");
+                request.getChequeType() == ChequeType.MANAGERS_CHEQUE
+                        ? "Physical receipt of Managers Cheque stock confirmed by servicing branch CSO."
+                        : "Physical receipt confirmed by servicing branch CSO.");
         return Map.of("request", view(request));
     }
 
@@ -526,6 +528,9 @@ public class RequestService {
         assertServicingBranch(principal, request);
         if (request.getStatus() != RequestStatus.RECEIVED_BY_BRANCH)
             invalidTransition(request);
+        if (request.getChequeType() == ChequeType.MANAGERS_CHEQUE)
+            throw new ApiException(HttpStatus.CONFLICT, "MANAGERS_CHEQUE_CUSTODY_CONFIRMATION_REQUIRED",
+                    "Managers Cheque must be completed through the custody confirmation workflow.");
         if (confirmation == null || confirmation.requestVersion() == null
                 || request.getVersion() != confirmation.requestVersion())
             throw new ApiException(HttpStatus.CONFLICT, "STALE_REQUEST_VERSION",
@@ -545,9 +550,34 @@ public class RequestService {
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ACCOUNT_SUFFIX_MISMATCH",
                     "The delivery details could not be verified.");
         transition(request, RequestStatus.DELIVERED, security.user(),
-                request.getChequeType() == ChequeType.MANAGERS_CHEQUE
-                        ? "Authorized officer and Manager's Cheque stock handover into branch custody confirmed."
-                        : "Customer identity and physical cheque-book handover confirmed by branch CSO.");
+                "Customer identity and physical cheque-book handover confirmed by branch CSO.");
+        return Map.of("request", view(request));
+    }
+
+    @Transactional
+    public Map<String, Object> confirmManagersChequeCustody(String number,
+            ManagersChequeCustodyConfirmationRequest confirmation) {
+        security.requirePermission(Permissions.DELIVER_REQUEST);
+        ChequeRequest request = lockedRequest(number);
+        PortalPrincipal principal = security.principal();
+        assertServicingBranch(principal, request);
+        if (request.getChequeType() != ChequeType.MANAGERS_CHEQUE)
+            throw new ApiException(HttpStatus.CONFLICT, "MANAGERS_CHEQUE_REQUIRED",
+                    "Custody confirmation is only available for Managers Cheque requests.");
+        if (request.getStatus() != RequestStatus.RECEIVED_BY_BRANCH)
+            invalidTransition(request);
+        if (confirmation == null || confirmation.requestVersion() == null
+                || request.getVersion() != confirmation.requestVersion())
+            throw new ApiException(HttpStatus.CONFLICT, "STALE_REQUEST_VERSION",
+                    "This request has changed. Refresh it before confirming custody.");
+        if (!Boolean.TRUE.equals(confirmation.stockVerified())
+                || !Boolean.TRUE.equals(confirmation.custodyConfirmed()))
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "STOCK_CUSTODY_CONFIRMATION_REQUIRED",
+                    "Managers Cheque verification and branch custody must both be confirmed.");
+        transition(request, RequestStatus.CUSTODY_CONFIRMED, security.user(),
+                "Managers Cheque verified; handover into authorized branch custody confirmed.");
+        audit.record("MANAGERS_CHEQUE_CUSTODY_CONFIRMED", "CHEQUE_REQUEST", request.getRequestNumber(),
+                "Managers Cheque custody confirmed by " + security.user().getFullName() + ".");
         return Map.of("request", view(request));
     }
 

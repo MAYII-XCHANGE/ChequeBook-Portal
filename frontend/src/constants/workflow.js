@@ -9,7 +9,7 @@ export const CHEQUE_LEAF_OPTIONS = [50, 100];
 export const CHEQUE_TYPE_OPTIONS = [
   { code: '01', label: 'Individual Current Account' },
   { code: '02', label: 'Corporate Account' },
-  { code: '03', label: "Manager's Cheque" },
+  { code: '03', label: "Managers Cheque" },
 ];
 
 export function formatChequeType(code, label) {

@@ -139,7 +139,7 @@ public class AdminController {
             @NotBlank @Size(max = 30) String sortCode,
             @NotBlank @Size(max = 30) String chargeGlAccount,
             @NotBlank @Size(max = 30) String vatGlAccount,
-            @NotBlank @Pattern(regexp = "\\d{10}", message = "Manager's Cheque account must contain 10 digits.")
+            @NotBlank @Pattern(regexp = "\\d{10}", message = "Managers Cheque account must contain 10 digits.")
             String managersChequeAccount) {
     }
 

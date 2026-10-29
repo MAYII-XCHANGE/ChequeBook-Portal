@@ -218,7 +218,7 @@ export function ApprovalsPage() {
               <Alert variant="warning" title="Confirm approval">
                 <p>
                   {selected.debitRequired === false || selected.chequeTypeCode === "03"
-                    ? "Approval will not debit this account. The Manager's Cheque request will become ready for vendor export immediately after approval."
+                    ? "Approval will not debit this account. The Managers Cheque request will become ready for vendor export immediately after approval."
                     : "Approval will immediately instruct Finacle to debit the customer's account. The request becomes exportable only after Finacle confirms the debit."}
                 </p>
               </Alert>

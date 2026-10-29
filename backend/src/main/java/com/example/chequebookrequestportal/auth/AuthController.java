@@ -28,17 +28,17 @@ public class AuthController {
         this.security = security;
     }
 
-     @PostMapping("/login")
-     ApiResponse<MfaChallengeResponse> login(@Valid @RequestBody LoginRequest
-     request) {
-     return new ApiResponse<>("MFA_REQUIRED", "Entrust verification is required.",
-     auth.login(request));
-     }
+//     @PostMapping("/login")
+//     ApiResponse<MfaChallengeResponse> login(@Valid @RequestBody LoginRequest
+//     request) {
+//     return new ApiResponse<>("MFA_REQUIRED", "Entrust verification is required.",
+//     auth.login(request));
+//     }
 
-//    @PostMapping("/login")
-//    ApiResponse<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-//        return ApiResponse.ok("Login successful.", auth.login(request));
-//    }
+    @PostMapping("/login")
+    ApiResponse<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+        return ApiResponse.ok("Login successful.", auth.login(request));
+    }
 
     @PostMapping("/mfa/entrust/verify")
     ApiResponse<AuthResponse> verifyEntrust(@Valid @RequestBody EntrustVerificationRequest request) {

@@ -52,10 +52,10 @@ public class WorkflowEmailService {
         boolean managersCheque = isManagersCheque(request);
         queue(request, EmailEventType.APPROVAL_REQUIRED,
                 users.findActiveByRoleAndBranch("BOM", request.getBranchCode()),
-                managersCheque ? "Manager's Cheque Request Awaiting Approval"
+                managersCheque ? "Managers Cheque Request Awaiting Approval"
                         : "Chequebook Request Awaiting Approval",
                 managersCheque
-                        ? "A new Manager's Cheque request is awaiting your review and approval. Customer debit will not be required if it is approved."
+                        ? "A new Managers Cheque request is awaiting your review and approval. Customer debit will not be required if it is approved."
                         : "A new chequebook request is awaiting your review and approval.",
                 RequestStatus.PENDING_APPROVAL, null);
     }
@@ -66,10 +66,10 @@ public class WorkflowEmailService {
             return;
         switch (status) {
             case APPROVED -> queueOperations(request, EmailEventType.OPERATIONS_EXPORT_READY,
-                    isManagersCheque(request) ? "Manager's Cheque Request Ready for Vendor Export"
+                    isManagersCheque(request) ? "Managers Cheque Request Ready for Vendor Export"
                             : "Chequebook Request Ready for Vendor Export",
                     isManagersCheque(request)
-                            ? "A Manager's Cheque request was approved without customer debit and is ready for vendor export."
+                            ? "A Managers Cheque request was approved without customer debit and is ready for vendor export."
                             : "A successfully debited chequebook request is ready for vendor export.",
                     status);
             case DEBIT_REVIEW_REQUIRED -> queueOperations(request,
@@ -89,34 +89,36 @@ public class WorkflowEmailService {
                     "The failed chequebook request was cancelled after the customer charge was reversed. A new request may now be initiated if required.",
                     status);
             case DISPATCHED -> queueBranch(request, EmailEventType.BRANCH_DISPATCHED,
-                    isManagersCheque(request) ? "Manager's Cheque Stock Dispatched to Branch"
+                    isManagersCheque(request) ? "Managers Cheque Dispatched to Branch"
                             : "Chequebook Dispatched to Branch",
                     isManagersCheque(request)
-                            ? "Printed Manager's Cheque stock has been dispatched to your branch."
+                            ? "Printed Managers Cheque has been dispatched to your branch."
                             : "A chequebook has been dispatched to your branch.",
                     status);
             case RECEIVED_BY_BRANCH -> {
                 queueBranch(request, EmailEventType.BRANCH_RECEIVED,
-                        isManagersCheque(request) ? "Manager's Cheque Stock Received at Branch"
+                        isManagersCheque(request) ? "Managers Cheque Received at Branch"
                                 : "Chequebook Received at Branch",
                         isManagersCheque(request)
-                                ? "Your branch confirmed receipt of the Manager's Cheque stock. It is now awaiting authorized internal handover and custody confirmation."
+                                ? "Your branch confirmed receipt of the Managers Cheque. It is now awaiting authorized internal handover and custody confirmation."
                                 : "Your branch confirmed receipt of a chequebook that is now awaiting customer collection.",
                         status);
                 queueOperations(request, EmailEventType.BRANCH_RECEIVED,
-                        isManagersCheque(request) ? "Manager's Cheque Branch Receipt Confirmed"
+                        isManagersCheque(request) ? "Managers Cheque Branch Receipt Confirmed"
                                 : "Branch Receipt Confirmed",
                         isManagersCheque(request)
-                                ? "The servicing branch confirmed physical receipt of the dispatched Manager's Cheque stock."
+                                ? "The servicing branch confirmed physical receipt of the dispatched Managers Cheque."
                                 : "The servicing branch confirmed physical receipt of a dispatched chequebook.",
                         status);
             }
             case DELIVERED -> queueOperations(request, EmailEventType.CUSTOMER_COLLECTION_CONFIRMED,
-                    isManagersCheque(request) ? "Manager's Cheque Stock Handover Confirmed"
-                            : "Customer Chequebook Collection Confirmed",
-                    isManagersCheque(request)
-                            ? "The servicing branch confirmed the Manager's Cheque stock handover into authorized branch custody."
-                            : "The servicing branch confirmed that the customer has collected the cheque book.",
+                    "Customer Chequebook Collection Confirmed",
+                    "The servicing branch confirmed that the customer has collected the cheque book.",
+                    status);
+            case CUSTODY_CONFIRMED -> queueOperations(request,
+                    EmailEventType.MANAGERS_CHEQUE_CUSTODY_CONFIRMED,
+                    "Managers Cheque Custody Confirmed",
+                    "The servicing branch verified the Managers Cheque and confirmed its handover into authorized branch custody.",
                     status);
             default -> {
                 // DEBIT_FAILED is deliberately excluded: retry reminders remain in-app only.
@@ -184,10 +186,10 @@ public class WorkflowEmailService {
         if (isManagersCheque(request)) {
             return switch (status) {
                 case PENDING_APPROVAL -> "Awaiting BOM Review";
-                case APPROVED -> "Ready for Vendor Export — No Customer Debit Required";
-                case DISPATCHED -> "Manager's Cheque Stock Dispatched";
-                case RECEIVED_BY_BRANCH -> "Awaiting Authorized Stock Handover";
-                case DELIVERED -> "Stock Handover and Branch Custody Confirmed";
+                case APPROVED -> "Ready for Vendor Export — No Debit Required";
+                case DISPATCHED -> "Managers Cheque Dispatched";
+                case RECEIVED_BY_BRANCH -> "Awaiting Authorized Handover";
+                case CUSTODY_CONFIRMED -> "Authorized Handover and Branch Custody Confirmed";
                 default -> status.name().replace('_', ' ');
             };
         }

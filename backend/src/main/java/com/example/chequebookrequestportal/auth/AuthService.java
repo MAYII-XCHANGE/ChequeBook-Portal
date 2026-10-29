@@ -46,16 +46,16 @@ public class AuthService {
                 this.entrustAuthenticationClient = entrustAuthenticationClient;
         }
 
-         public MfaChallengeResponse login(LoginRequest request) {
-         StaffUser user = authenticate(request);
-         return mfaChallenges.create(user, entrustUsername(user.getEmail()));
-         }
+//         public MfaChallengeResponse login(LoginRequest request) {
+//         StaffUser user = authenticate(request);
+//         return mfaChallenges.create(user, entrustUsername(user.getEmail()));
+//         }
 
         // TEST ONLY: bypass Entrust MFA
-//        public AuthResponse login(LoginRequest request) {
-//                StaffUser user = authenticate(request);
-//                return tokenResponse(user);
-//        }
+        public AuthResponse login(LoginRequest request) {
+                StaffUser user = authenticate(request);
+                return tokenResponse(user);
+        }
 
         private StaffUser authenticate(LoginRequest request) {
 

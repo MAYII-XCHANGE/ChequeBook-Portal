@@ -53,7 +53,7 @@ public class ReportController {
             "PRINTED", "FINACLE_REGISTRATION_PENDING", "FINACLE_REGISTERED", "FINACLE_REGISTRATION_FAILED",
             "FINACLE_REGISTRATION_REVIEW_REQUIRED", "DISPATCHED", "RECEIVED_BY_BRANCH")
                 .contains(String.valueOf(row.get("status")))).count());
-        summary.put("delivered", count(rows, "DELIVERED"));
+        summary.put("delivered", count(rows, "DELIVERED") + count(rows, "CUSTODY_CONFIRMED"));
         return Map.of("summary", summary, "data", rows);
     }
 
@@ -197,6 +197,7 @@ public class ReportController {
             case "DISPATCHED" -> "Dispatched";
             case "RECEIVED_BY_BRANCH" -> "Received by branch";
             case "DELIVERED" -> "Delivered";
+            case "CUSTODY_CONFIRMED" -> "Managers Cheque custody confirmed";
             case "CANCELLED" -> "Cancelled";
             default -> status;
         };

@@ -77,7 +77,7 @@ export function BranchManagementPage() {
     if (!draft.chargeGlAccount.trim()) nextErrors.chargeGlAccount = "Enter the branch charge GL account.";
     if (!draft.vatGlAccount.trim()) nextErrors.vatGlAccount = "Enter the branch VAT GL account.";
     if (!/^\d{10}$/.test(draft.managersChequeAccount.trim())) {
-      nextErrors.managersChequeAccount = "Enter the 10-digit Manager's Cheque account.";
+      nextErrors.managersChequeAccount = "Enter the 10-digit Managers Cheque account.";
     }
     if (draft.chargeGlAccount.trim().toLowerCase() === draft.vatGlAccount.trim().toLowerCase()) {
       nextErrors.vatGlAccount = "The VAT GL must be different from the charge GL.";
@@ -167,7 +167,7 @@ export function BranchManagementPage() {
         ) : (
           <>
             <ManagementTable
-              headers={["Branch code", "Branch name", "Manager's Cheque account", "Charge GL", "VAT GL", "Sort code", "Address", "Status", "Action"]}
+              headers={["Branch code", "Branch name", "Managers Cheque account", "Charge GL", "VAT GL", "Sort code", "Address", "Status", "Action"]}
               minWidth="1320px"
               rows={pagination.paginatedItems.map((branch) => ({
                 id: branch.id,
@@ -240,7 +240,7 @@ export function BranchManagementPage() {
           <BranchField label="Sort code" name="sortCode" draft={draft} errors={errors} setDraft={setDraft} />
           <BranchField label="Cheque charge GL account" name="chargeGlAccount" draft={draft} errors={errors} setDraft={setDraft} />
           <BranchField label="VAT GL account" name="vatGlAccount" draft={draft} errors={errors} setDraft={setDraft} />
-          <BranchField label="Manager's Cheque account" name="managersChequeAccount" draft={draft} errors={errors} setDraft={setDraft} numeric maxLength={10} />
+          <BranchField label="Managers Cheque account" name="managersChequeAccount" draft={draft} errors={errors} setDraft={setDraft} numeric maxLength={10} />
           <BranchField label="Address" name="address" draft={draft} errors={errors} setDraft={setDraft} />
           <button type="submit" className="hidden" aria-hidden="true" />
         </form>

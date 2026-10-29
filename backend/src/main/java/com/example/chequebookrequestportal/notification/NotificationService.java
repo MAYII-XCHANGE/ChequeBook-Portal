@@ -2,6 +2,7 @@ package com.example.chequebookrequestportal.notification;
 
 import com.example.chequebookrequestportal.common.Permissions;
 import com.example.chequebookrequestportal.domain.RequestStatus;
+import com.example.chequebookrequestportal.domain.ChequeType;
 import com.example.chequebookrequestportal.domain.DebitStatus;
 import com.example.chequebookrequestportal.notification.dto.NotificationActionResponse;
 import com.example.chequebookrequestportal.notification.dto.NotificationSummaryResponse;
@@ -76,9 +77,13 @@ public class NotificationService {
             add(actions, NotificationActionCode.BRANCH_RECEIPT_REQUIRED,
                     requests.countByStatusAndBranchCodeIgnoreCase(
                             RequestStatus.DISPATCHED, principal.branchCode()));
+            long completionRequired = requests.countByStatusAndBranchCodeIgnoreCase(
+                    RequestStatus.RECEIVED_BY_BRANCH, principal.branchCode());
+            long custodyRequired = requests.countByStatusAndBranchCodeIgnoreCaseAndChequeType(
+                    RequestStatus.RECEIVED_BY_BRANCH, principal.branchCode(), ChequeType.MANAGERS_CHEQUE);
             add(actions, NotificationActionCode.DELIVERY_CONFIRMATION_REQUIRED,
-                    requests.countByStatusAndBranchCodeIgnoreCase(
-                            RequestStatus.RECEIVED_BY_BRANCH, principal.branchCode()));
+                    Math.max(0, completionRequired - custodyRequired));
+            add(actions, NotificationActionCode.MANAGERS_CHEQUE_CUSTODY_CONFIRMATION_REQUIRED, custodyRequired);
         }
 
         long totalCount = actions.stream().mapToLong(NotificationActionResponse::count).sum();

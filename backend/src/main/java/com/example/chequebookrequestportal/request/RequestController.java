@@ -128,6 +128,13 @@ public class RequestController {
         return service.deliver(number, request);
     }
 
+    @PostMapping("/cheque-requests/{number}/confirm-custody")
+    @PreAuthorize("hasAuthority('DELIVER_CHEQUE_REQUEST')")
+    Map<String, Object> confirmStockCustody(@PathVariable String number,
+            @Valid @RequestBody ManagersChequeCustodyConfirmationRequest request) {
+        return service.confirmManagersChequeCustody(number, request);
+    }
+
     public record CreateRequest(
             @Pattern(regexp = "\\d{10}") String accountNumber,
             int leafCount,

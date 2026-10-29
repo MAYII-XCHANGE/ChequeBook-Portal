@@ -294,11 +294,11 @@ export function NewRequestPage() {
           )}
           {chequeType === "03" && searching && (
             <Alert variant="info" title="Loading configured account">
-              Retrieving your branch's Manager's Cheque account from the backend.
+              Retrieving your branch's Managers Cheque account from the backend.
             </Alert>
           )}
           {chequeType === "03" && lookupError && (
-            <Alert variant="error" title="Manager's Cheque account unavailable">
+            <Alert variant="error" title="Managers Cheque account unavailable">
               {lookupError}
             </Alert>
           )}
@@ -307,7 +307,7 @@ export function NewRequestPage() {
           <div className="mt-7 space-y-6">
             <Card className="shadow-none">
               <CardHeader
-                title={chequeType === "03" ? "Manager's Cheque account information" : "Customer information"}
+                title={chequeType === "03" ? "Managers Cheque account information" : "Customer information"}
                 description={chequeType === "03"
                   ? "Verified in Finacle using your assigned branch configuration"
                   : "Retrieved from the core banking service"}
@@ -364,7 +364,7 @@ export function NewRequestPage() {
                 />
                 <div className="space-y-6 p-5">
                   {chequeType === "03" && (
-                    <Alert variant="info" title="Manager's Cheque account">
+                    <Alert variant="info" title="Managers Cheque account">
                       This account was selected automatically from your assigned branch configuration.
                       No customer debit will be performed after BOM approval.
                     </Alert>
@@ -462,7 +462,7 @@ export function NewRequestPage() {
         <Alert variant="info" title="Before you submit">
           <p>
             {chequeType === "03"
-              ? "The backend will verify that this is your branch's configured Manager's Cheque account. No customer debit will be performed after BOM approval."
+              ? "The backend will verify that this is your branch's configured Managers Cheque account. No customer debit will be performed after BOM approval."
               : "The backend will remain the authority for duplicate prevention, eligibility and the final request identifier."}
           </p>
         </Alert>

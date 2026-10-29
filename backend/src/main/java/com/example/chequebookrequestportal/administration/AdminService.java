@@ -292,7 +292,7 @@ public class AdminService {
         branches.findByManagersChequeAccount(input.managersChequeAccount().trim()).ifPresent(branch -> {
             if (currentBranchId == null || !currentBranchId.equals(branch.getId()))
                 throw new ApiException(HttpStatus.CONFLICT, "MANAGERS_CHEQUE_ACCOUNT_EXISTS",
-                        "The Manager's Cheque account is already assigned to another branch.");
+                        "The Managers Cheque account is already assigned to another branch.");
         });
     }
 
@@ -314,7 +314,7 @@ public class AdminService {
                 normalizeGlAccount(input.chargeGlAccount()));
         addChange(changes, "VAT GL account updated", branch.getVatGlAccount(),
                 normalizeGlAccount(input.vatGlAccount()));
-        addChange(changes, "Manager's Cheque account updated", branch.getManagersChequeAccount(),
+        addChange(changes, "Managers Cheque account updated", branch.getManagersChequeAccount(),
                 input.managersChequeAccount().trim());
         return changes;
     }

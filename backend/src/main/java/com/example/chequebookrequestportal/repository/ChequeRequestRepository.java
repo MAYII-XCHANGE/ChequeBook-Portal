@@ -49,6 +49,9 @@ public interface ChequeRequestRepository
 
     long countByStatusAndBranchCodeIgnoreCase(RequestStatus status, String branchCode);
 
+    long countByStatusAndBranchCodeIgnoreCaseAndChequeType(RequestStatus status, String branchCode,
+            ChequeType chequeType);
+
     @Query("""
             select count(request) from ChequeRequest request
             where request.status in :statuses

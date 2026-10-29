@@ -17,7 +17,7 @@ import { StatusBadge } from "../../components/ui/StatusBadge";
 import { Modal } from "../../components/ui/Modal";
 import { useAsync } from "../../hooks/useAsync";
 import { chequeRequestApi } from "../../services/api/chequeRequestApi";
-import { REQUEST_STATUS } from "../../constants/status";
+import { REQUEST_STATUS, STATUS_CONFIG } from "../../constants/status";
 import { hasPermission, PERMISSIONS } from "../../constants/access";
 import { requestNotificationRefresh } from "../../hooks/useNotificationSummary";
 import { formatBranch, formatDate, maskAccount } from "../../utils/formatters";
@@ -32,11 +32,14 @@ export function RequestDetailPage() {
   const [deliveryModalOpen, setDeliveryModalOpen] = useState(false);
   const [identityVerified, setIdentityVerified] = useState(false);
   const [handoverConfirmed, setHandoverConfirmed] = useState(false);
+  const [stockVerified, setStockVerified] = useState(false);
+  const [custodyConfirmed, setCustodyConfirmed] = useState(false);
   const [accountLastFour, setAccountLastFour] = useState("");
   const [deliveryError, setDeliveryError] = useState("");
   const receivingRef = useRef(false);
   const deliveringRef = useRef(false);
   const accountLastFourRef = useRef(null);
+  const stockVerifiedRef = useRef(null);
   const { data, loading, error, retry } = useAsync(
     () => chequeRequestApi.getRequestById(requestId),
     [requestId],
@@ -54,6 +57,7 @@ export function RequestDetailPage() {
       </Card>
     );
   const request = data.request;
+  const isManagersCheque = request.chequeTypeCode === "03";
   const canConfirmReceipt =
     hasPermission(user, PERMISSIONS.DELIVER_CHEQUE_REQUEST) &&
     request.status === REQUEST_STATUS.DISPATCHED &&
@@ -86,22 +90,29 @@ export function RequestDetailPage() {
     setDeliveryModalOpen(false);
     setIdentityVerified(false);
     setHandoverConfirmed(false);
+    setStockVerified(false);
+    setCustodyConfirmed(false);
     setAccountLastFour("");
     setDeliveryError("");
   };
 
-  const finishDelivery = () => {
+  const finishCompletion = () => {
     setDeliveryModalOpen(false);
-    toast.success(`${request.id} marked as delivered.`);
+    toast.success(isManagersCheque
+      ? `${request.id}: Managers Cheque custody confirmed.`
+      : `${request.id} marked as delivered.`);
     requestNotificationRefresh();
     navigate("/cheque-requests");
   };
 
-  const reconcileUncertainDelivery = async (requestError) => {
+  const reconcileUncertainCompletion = async (requestError) => {
     try {
       const latest = await chequeRequestApi.getRequestById(request.id);
-      if (latest.request?.status === REQUEST_STATUS.DELIVERED) {
-        finishDelivery();
+      const completedStatus = isManagersCheque
+        ? REQUEST_STATUS.CUSTODY_CONFIRMED
+        : REQUEST_STATUS.DELIVERED;
+      if (latest.request?.status === completedStatus) {
+        finishCompletion();
         return;
       }
       if (requestError.code === "STALE_REQUEST_VERSION") {
@@ -113,7 +124,9 @@ export function RequestDetailPage() {
     } catch {
       // Preserve the original delivery error when the follow-up status check also fails.
     }
-    setDeliveryError(requestError.message || "The delivery could not be confirmed.");
+    setDeliveryError(requestError.message || (isManagersCheque
+      ? "Custody could not be confirmed."
+      : "The delivery could not be confirmed."));
   };
 
   const markDelivered = async (event) => {
@@ -129,7 +142,7 @@ export function RequestDetailPage() {
         handoverConfirmed,
         requestVersion: request.version,
       });
-      finishDelivery();
+      finishCompletion();
     } catch (requestError) {
       if (requestError.code === "ACCOUNT_SUFFIX_MISMATCH") {
         setDeliveryError("The account digits do not match this request. Check the account and try again.");
@@ -140,7 +153,7 @@ export function RequestDetailPage() {
         || requestError.code === "NETWORK_ERROR"
         || requestError.retryable
       ) {
-        await reconcileUncertainDelivery(requestError);
+        await reconcileUncertainCompletion(requestError);
       } else {
         setDeliveryError(requestError.message || "The delivery could not be confirmed.");
       }
@@ -149,17 +162,46 @@ export function RequestDetailPage() {
       setDelivering(false);
     }
   };
-  const deliveryConfirmationComplete =
-    identityVerified && handoverConfirmed && /^\d{4}$/.test(accountLastFour);
+  const confirmStockCustody = async (event) => {
+    event.preventDefault();
+    if (deliveringRef.current) return;
+    deliveringRef.current = true;
+    setDelivering(true);
+    setDeliveryError("");
+    try {
+      await chequeRequestApi.confirmManagersChequeCustody(request.id, {
+        stockVerified,
+        custodyConfirmed,
+        requestVersion: request.version,
+      });
+      finishCompletion();
+    } catch (requestError) {
+      if (
+        requestError.code === "STALE_REQUEST_VERSION"
+        || requestError.code === "NETWORK_ERROR"
+        || requestError.retryable
+      ) {
+        await reconcileUncertainCompletion(requestError);
+      } else {
+        setDeliveryError(requestError.message || "Custody could not be confirmed.");
+      }
+    } finally {
+      deliveringRef.current = false;
+      setDelivering(false);
+    }
+  };
+  const deliveryConfirmationComplete = isManagersCheque
+    ? stockVerified && custodyConfirmed
+    : identityVerified && handoverConfirmed && /^\d{4}$/.test(accountLastFour);
   const facts = [
     ["Request ID", request.id],
     ["Request date", formatDate(request.createdAt, true)],
-    ["Customer Name", request.customer],
+    [isManagersCheque ? "Account name" : "Customer Name", request.customer],
     ["Account number", maskAccount(request.accountNumber)],
     ["Cheque type", formatChequeType(request.chequeTypeCode, request.chequeTypeLabel)],
-    ["Starting cheque number", request.startChequeNumber || "Not assigned"],
-    ["Ending cheque number", request.endChequeNumber || "Not assigned"],
-    ["Vendor reference", request.vendorReference || "Not assigned"],
+    // ["Starting cheque number", request.startChequeNumber || "Not assigned"],
+    // ["Ending cheque number", request.endChequeNumber || "Not assigned"],
+    // ["Vendor reference", request.vendorReference || "Not assigned"],
     ["Debit status", request.debitStatus === "NOT_REQUIRED" ? "Not required" : request.debitStatus || "Not started"],
     ["Charge amount", request.chargeAmount === "NOT_REQUIRED" ? "Not required" : request.chargeAmount || "Not available"],
     ["VAT amount", request.vatAmount === "NOT_REQUIRED" ? "Not required" : request.vatAmount || "Not available"],
@@ -210,7 +252,7 @@ export function RequestDetailPage() {
             {canDeliver && (
               <Button onClick={() => setDeliveryModalOpen(true)}>
                 <PackageCheck className="h-4 w-4" />
-                Mark as delivered
+                {isManagersCheque ? "Confirm cheque custody" : "Mark as delivered"}
               </Button>
             )}
           </div>
@@ -273,7 +315,8 @@ export function RequestDetailPage() {
             {request.timeline.map((event, index) => {
               const isLast = index === request.timeline.length - 1;
               const isCompleted =
-                !isLast || request.status === REQUEST_STATUS.DELIVERED;
+                !isLast || request.status === REQUEST_STATUS.DELIVERED
+                || request.status === REQUEST_STATUS.CUSTODY_CONFIRMED;
               return (
                 <li
                   key={`${event.status}-${event.at}`}
@@ -294,7 +337,7 @@ export function RequestDetailPage() {
                   )}
                   <div className="min-w-0 pt-0.5">
                     <p className="text-sm font-semibold text-ink">
-                      {event.status}
+                      {STATUS_CONFIG[event.status]?.label || event.status}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
                       {formatDate(event.at, true)}
@@ -319,9 +362,11 @@ export function RequestDetailPage() {
         open={deliveryModalOpen}
         onClose={closeDeliveryModal}
         closeDisabled={delivering}
-        initialFocusRef={accountLastFourRef}
-        title="Confirm customer collection"
-        description="Confirm that the customer has collected the cheque book before marking this request as delivered."
+        initialFocusRef={isManagersCheque ? stockVerifiedRef : accountLastFourRef}
+        title={isManagersCheque ? "Confirm Managers Cheque Custody" : "Confirm customer collection"}
+        description={isManagersCheque
+          ? "Confirm that the printed Managers Cheque has been verified and transferred into authorized branch custody."
+          : "Confirm that the customer has collected the cheque book before marking this request as delivered."}
         footer={
           <>
             <Button variant="secondary" onClick={closeDeliveryModal} disabled={delivering}>
@@ -333,68 +378,79 @@ export function RequestDetailPage() {
               loading={delivering}
               disabled={!deliveryConfirmationComplete}
             >
-              Confirm delivery
+              {isManagersCheque ? "Confirm cheque custody" : "Confirm delivery"}
             </Button>
           </>
         }
       >
-        <form id="delivery-confirmation-form" className="space-y-5" onSubmit={markDelivered}>
+        <form
+          id="delivery-confirmation-form"
+          className="space-y-5"
+          onSubmit={isManagersCheque ? confirmStockCustody : markDelivered}
+        >
           <label className="flex items-start gap-3 text-sm text-slate-700">
             <input
+              ref={isManagersCheque ? stockVerifiedRef : undefined}
               type="checkbox"
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-              checked={identityVerified}
-              onChange={(event) => setIdentityVerified(event.target.checked)}
+              checked={isManagersCheque ? stockVerified : identityVerified}
+              onChange={(event) => isManagersCheque
+                ? setStockVerified(event.target.checked)
+                : setIdentityVerified(event.target.checked)}
               disabled={delivering}
             />
-            <span>{request.chequeTypeCode === "03"
-              ? "The authorized receiving officer has been verified"
+            <span>{isManagersCheque
+              ? "Managers Cheque verified"
               : "Customer identity has been verified"}</span>
           </label>
           <label className="flex items-start gap-3 text-sm text-slate-700">
             <input
               type="checkbox"
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-              checked={handoverConfirmed}
-              onChange={(event) => setHandoverConfirmed(event.target.checked)}
+              checked={isManagersCheque ? custodyConfirmed : handoverConfirmed}
+              onChange={(event) => isManagersCheque
+                ? setCustodyConfirmed(event.target.checked)
+                : setHandoverConfirmed(event.target.checked)}
               disabled={delivering}
             />
-            <span>{request.chequeTypeCode === "03"
-              ? "Manager's Cheque stock has been handed into branch custody"
+            <span>{isManagersCheque
+              ? "Managers Cheque transferred to authorized branch custody"
               : "Cheque book has been handed to the customer"}</span>
           </label>
-          <div>
-            <label htmlFor="account-last-four" className="block text-sm font-semibold text-slate-700">
-              Last 4 digits of the customer account number
-            </label>
-            <input
-              ref={accountLastFourRef}
-              id="account-last-four"
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={4}
-              pattern="[0-9]{4}"
-              value={accountLastFour}
-              onChange={(event) => {
-                setAccountLastFour(event.target.value.replace(/\D/g, "").slice(0, 4));
-                setDeliveryError("");
-              }}
-              disabled={delivering}
-              aria-invalid={Boolean(deliveryError)}
-              aria-describedby={deliveryError ? "delivery-confirmation-error" : undefined}
-              className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm tracking-widest text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-slate-100"
-              placeholder="0000"
-            />
-            {deliveryError && (
-              <p id="delivery-confirmation-error" role="alert" className="mt-2 text-sm text-red-600">
-                {deliveryError}
-              </p>
-            )}
-          </div>
+          {!isManagersCheque && (
+            <div>
+              <label htmlFor="account-last-four" className="block text-sm font-semibold text-slate-700">
+                Last 4 digits of the customer account number
+              </label>
+              <input
+                ref={accountLastFourRef}
+                id="account-last-four"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={4}
+                pattern="[0-9]{4}"
+                value={accountLastFour}
+                onChange={(event) => {
+                  setAccountLastFour(event.target.value.replace(/\D/g, "").slice(0, 4));
+                  setDeliveryError("");
+                }}
+                disabled={delivering}
+                aria-invalid={Boolean(deliveryError)}
+                aria-describedby={deliveryError ? "delivery-confirmation-error" : undefined}
+                className="mt-2 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm tracking-widest text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-slate-100"
+                placeholder="0000"
+              />
+            </div>
+          )}
+          {deliveryError && (
+            <p id="delivery-confirmation-error" role="alert" className="text-sm text-red-600">
+              {deliveryError}
+            </p>
+          )}
           <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
-            {request.chequeTypeCode === "03"
-              ? "This action is final and cannot be undone. Confirm only after the Manager's Cheque stock has been handed into authorized branch custody."
+            {isManagersCheque
+              ? "This action is final and cannot be undone. Confirm only after the Managers Cheque has been verified and transferred into authorized branch custody."
               : "This action is final and cannot be undone. Only confirm delivery after the cheque book has been handed to the customer."}
           </p>
         </form>

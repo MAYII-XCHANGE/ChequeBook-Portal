@@ -43,10 +43,10 @@ public class AccountController {
         String configuredAccount = actorBranch.getManagersChequeAccount();
         if (!present(configuredAccount))
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "MANAGERS_CHEQUE_ACCOUNT_NOT_CONFIGURED",
-                    "A Manager's Cheque account has not been configured for your branch.");
+                    "A Managers Cheque account has not been configured for your branch.");
         if (!configuredAccount.matches("\\d{10}"))
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "MANAGERS_CHEQUE_CONFIGURATION_INVALID",
-                    "The configured Manager's Cheque account must contain exactly 10 digits.");
+                    "The configured Managers Cheque account must contain exactly 10 digits.");
 
         var details = managersChequeAccounts.resolve(configuredAccount, actorBranch.getCode());
         Map<String, Object> account = new LinkedHashMap<>();

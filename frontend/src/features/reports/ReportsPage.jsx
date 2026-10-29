@@ -13,7 +13,7 @@ import { useAsync } from '../../hooks/useAsync';
 import { reportApi } from '../../services/api/reportApi';
 
 const metrics = [
-  ['Total Requests', 'total', FileSpreadsheet, 'bg-blue-50 text-blue-700'], ['Approved', 'approved', CheckCircle2, 'bg-emerald-50 text-emerald-700'], ['Rejected', 'rejected', XCircle, 'bg-red-50 text-red-700'], ['Processing', 'processing', Timer, 'bg-violet-50 text-violet-700'], ['Delivered', 'delivered', Truck, 'bg-teal-50 text-teal-700'],
+  ['Total Requests', 'total', FileSpreadsheet, 'bg-blue-50 text-blue-700'], ['Approved', 'approved', CheckCircle2, 'bg-emerald-50 text-emerald-700'], ['Rejected', 'rejected', XCircle, 'bg-red-50 text-red-700'], ['Processing', 'processing', Timer, 'bg-violet-50 text-violet-700'], ['Completed', 'delivered', Truck, 'bg-teal-50 text-teal-700'],
 ];
 
 export function ReportsPage() {

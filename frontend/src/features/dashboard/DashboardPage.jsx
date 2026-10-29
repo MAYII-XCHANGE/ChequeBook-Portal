@@ -67,8 +67,8 @@ const metricConfig = [
     tone: "bg-emerald-50 text-emerald-700",
   },
   {
-    label: "Delivered",
-    statuses: [REQUEST_STATUS.DELIVERED],
+    label: "Completed",
+    statuses: [REQUEST_STATUS.DELIVERED, REQUEST_STATUS.CUSTODY_CONFIRMED],
     icon: Truck,
     tone: "bg-teal-50 text-teal-700",
   },
