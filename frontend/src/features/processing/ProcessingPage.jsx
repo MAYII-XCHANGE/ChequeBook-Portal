@@ -246,7 +246,7 @@ export function ProcessingPage() {
               </>
             ) : (
               <>
-                {selected.finacleRegistrationStatus && (
+                {selected.finacleRegistrationEnabled && selected.finacleRegistrationStatus && (
                   <Alert
                     variant={selected.finacleRegistrationStatus === 'SUCCESSFUL' ? 'success'
                       : selected.finacleRegistrationStatus === 'FAILED' ? 'error' : 'warning'}

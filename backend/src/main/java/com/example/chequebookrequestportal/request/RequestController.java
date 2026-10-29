@@ -2,6 +2,7 @@ package com.example.chequebookrequestportal.request;
 
 import com.example.chequebookrequestportal.domain.RequestStatus;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -111,8 +112,7 @@ public class RequestController {
     @PostMapping("/cheque-requests/{number}/dispatch")
     @PreAuthorize("hasAuthority('PROCESS_CHEQUE_REQUEST')")
     Map<String, Object> dispatch(@PathVariable String number) {
-        return service.transition(number, RequestStatus.FINACLE_REGISTERED, RequestStatus.DISPATCHED,
-                "Chequebook dispatched to branch.");
+        return service.dispatch(number);
     }
 
     @PostMapping("/cheque-requests/{number}/receive-at-branch")
@@ -129,9 +129,13 @@ public class RequestController {
     }
 
     public record CreateRequest(
-            @NotBlank @Pattern(regexp = "\\d{10}") String accountNumber,
+            @Pattern(regexp = "\\d{10}") String accountNumber,
             int leafCount,
-            @NotBlank @Pattern(regexp = "01|02", message = "Cheque type must be 01 or 02.") String chequeType) {
+            @NotBlank @Pattern(regexp = "01|02|03", message = "Cheque type must be 01, 02 or 03.") String chequeType) {
+        @AssertTrue(message = "A 10-digit account number is required for cheque types 01 and 02.")
+        public boolean isAccountNumberValidForChequeType() {
+            return "03".equals(chequeType) || accountNumber != null && accountNumber.matches("\\d{10}");
+        }
     }
 
     public record RejectRequest(@NotBlank @jakarta.validation.constraints.Size(min = 5, max = 1000) String reason) {

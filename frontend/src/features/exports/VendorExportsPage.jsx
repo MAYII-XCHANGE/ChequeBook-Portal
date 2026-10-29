@@ -31,12 +31,15 @@ const EMPTY_ROWS = [];
 
 export function VendorExportsPage() {
   const { data, loading, error, retry } = useAsync(async () => {
-    const [eligible, batches] = await Promise.all([exportApi.eligible(), exportApi.list()]);
-    return { eligible: eligible.data, batches };
+    const [eligible, batches, capabilities] = await Promise.all([
+      exportApi.eligible(), exportApi.list(), exportApi.capabilities(),
+    ]);
+    return { eligible: eligible.data, batches, capabilities };
   }, []);
   const [selected, setSelected] = useState([]);
   const [generating, setGenerating] = useState(false);
   const [workingBatches, setWorkingBatches] = useState({});
+  const [printCandidate, setPrintCandidate] = useState(null);
   const [uploadCandidate, setUploadCandidate] = useState(null);
   const [uploadRows, setUploadRows] = useState([]);
   const [uploadWorkbook, setUploadWorkbook] = useState(null);
@@ -107,6 +110,21 @@ export function VendorExportsPage() {
       retry();
     } catch (actionError) {
       toast.error(actionError.message || 'The batch could not be marked as sent.');
+    }
+  };
+
+  const confirmPrinted = async () => {
+    if (!printCandidate) return;
+    const { batchNumber } = printCandidate;
+    try {
+      const completed = await runBatchAction(batchNumber, () => exportApi.confirmPrinted(batchNumber));
+      if (!completed) return;
+      setPrintCandidate(null);
+      toast.success(`${batchNumber} and all requests in it were marked as printed.`);
+      requestNotificationRefresh();
+      retry();
+    } catch (actionError) {
+      toast.error(actionError.message || 'The batch could not be marked as printed.');
     }
   };
 
@@ -278,13 +296,16 @@ export function VendorExportsPage() {
       ? `${Math.max(1, Math.round(uploadFile.size / 1024))} KB`
       : `${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB`}`
     : '';
+  const finacleRegistrationEnabled = data?.capabilities?.finacleRegistrationEnabled ?? false;
 
   return (
     <>
       <PageHeader
         eyebrow="Clearing Operations"
         title="Vendor exports"
-        description="Create vendor batches, import assigned cheque ranges and register printed cheque books in Finacle."
+        description={finacleRegistrationEnabled
+          ? 'Create vendor batches, import assigned cheque ranges and register printed cheque books in Finacle.'
+          : 'Create vendor batches and confirm completed vendor printing.'}
       />
       {loading ? (
         <Card><LoadingState /></Card>
@@ -381,16 +402,24 @@ export function VendorExportsPage() {
                     {batch.status === 'SENT' && (
                       <Button
                         loading={Boolean(workingBatches[batch.batchNumber])}
-                        onClick={() => openUpload(batch)}
+                        onClick={() => (finacleRegistrationEnabled
+                          ? openUpload(batch)
+                          : setPrintCandidate(batch))}
                       >
-                        <Upload className="h-4 w-4" />
-                        Upload vendor response
+                        {finacleRegistrationEnabled
+                          ? <><Upload className="h-4 w-4" />Upload vendor response</>
+                          : <><CheckCircle2 className="h-4 w-4" />Confirm printed</>}
                       </Button>
                     )}
-                    {batch.status === 'PRINTED' && (
+                    {batch.status === 'PRINTED' && finacleRegistrationEnabled && (
                       <Button variant="secondary" onClick={() => openAllocations(batch)}>
                         View serial allocations
                       </Button>
+                    )}
+                    {batch.status === 'PRINTED' && !finacleRegistrationEnabled && (
+                      <span className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                        <CheckCircle2 className="h-4 w-4" /> Printing confirmed
+                      </span>
                     )}
                   </div>
                 </div>
@@ -399,6 +428,39 @@ export function VendorExportsPage() {
           </Card>
         </div>
       )}
+      <Modal
+        open={Boolean(printCandidate)}
+        onClose={() => {
+          if (!printCandidate || !workingBatches[printCandidate.batchNumber]) setPrintCandidate(null);
+        }}
+        closeDisabled={Boolean(printCandidate && workingBatches[printCandidate.batchNumber])}
+        title="Confirm vendor printing"
+        description="This records the vendor's confirmation for the complete batch."
+        footer={(
+          <>
+            <Button
+              variant="secondary"
+              disabled={Boolean(printCandidate && workingBatches[printCandidate.batchNumber])}
+              onClick={() => setPrintCandidate(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              loading={Boolean(printCandidate && workingBatches[printCandidate.batchNumber])}
+              onClick={confirmPrinted}
+            >
+              Confirm printed
+            </Button>
+          </>
+        )}
+      >
+        {printCandidate && (
+          <Alert variant="warning" title={`Batch ${printCandidate.batchNumber}`}>
+            All {printCandidate.recordCount} request{printCandidate.recordCount === 1 ? '' : 's'} in this batch
+            will be marked as printed. Confirm only after receiving the vendor's printing confirmation.
+          </Alert>
+        )}
+      </Modal>
       <Modal
         open={Boolean(uploadCandidate)}
         onClose={closeUpload}

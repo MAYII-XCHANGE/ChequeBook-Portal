@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.chequebookrequestportal.audit.AuditService;
+import com.example.chequebookrequestportal.corebanking.managerscheque.ManagersChequeAccountService;
 import com.example.chequebookrequestportal.corebanking.dto.response.InternalTransferResponse;
 import com.example.chequebookrequestportal.corebanking.service.CoreBankingService;
 import com.example.chequebookrequestportal.domain.Branch;
@@ -17,6 +18,7 @@ import com.example.chequebookrequestportal.domain.DebitStatus;
 import com.example.chequebookrequestportal.domain.RequestStatus;
 import com.example.chequebookrequestportal.domain.StaffUser;
 import com.example.chequebookrequestportal.email.WorkflowEmailService;
+import com.example.chequebookrequestportal.export.VendorWorkflowProperties;
 import com.example.chequebookrequestportal.repository.BranchRepository;
 import com.example.chequebookrequestportal.repository.ChargeTransactionRepository;
 import com.example.chequebookrequestportal.repository.ChequeNumberRepository;
@@ -65,7 +67,9 @@ class RequestServiceApprovalTest {
         RequestService service = new RequestService(requests, mock(EligibilityRepository.class), history, charges,
                 branches, mock(ChequeNumberRepository.class), coreBanking, security, mock(AuditService.class),
                 mock(WorkflowEmailService.class), BigDecimal.valueOf(100), BigDecimal.valueOf(200), "CREDIT",
-                BigDecimal.valueOf(0.075), "NGN");
+                BigDecimal.valueOf(0.075), "NGN",
+                mock(ManagersChequeAccountService.class),
+                mock(VendorWorkflowProperties.class));
 
         service.approve("CBR-001");
 

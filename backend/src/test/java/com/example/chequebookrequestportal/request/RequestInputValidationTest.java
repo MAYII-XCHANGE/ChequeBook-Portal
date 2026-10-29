@@ -51,11 +51,25 @@ class RequestInputValidationTest {
                 .anyMatch(violation -> violation.getPropertyPath().toString().equals("chequeType"));
     }
 
+    @Test
+    void managersChequeDoesNotRequireAClientSuppliedAccountNumber() {
+        var input = new RequestController.CreateRequest(null, 50, "03");
+
+        assertThat(validator.validate(input)).isEmpty();
+    }
+
+    @Test
+    void customerChequeTypesStillRequireAnAccountNumber() {
+        var input = new RequestController.CreateRequest(null, 50, "01");
+
+        assertThat(validator.validate(input)).isNotEmpty();
+    }
+
     private static Stream<String> supportedChequeTypes() {
-        return Stream.of("01", "02");
+        return Stream.of("01", "02", "03");
     }
 
     private static Stream<String> unsupportedChequeTypes() {
-        return Stream.of("", " ", "03", "99", "INDIVIDUAL");
+        return Stream.of("", " ", "99", "INDIVIDUAL");
     }
 }

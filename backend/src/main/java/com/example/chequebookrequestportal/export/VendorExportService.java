@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +56,7 @@ public class VendorExportService {
     private final RequestHistoryRepository history;
     private final SecurityService security;
     private final AuditService audit;
+    private final VendorWorkflowProperties workflow;
     private final Path outputDirectory;
     private final String deliverySol, deliveryAddress, schemeOverride;
 
@@ -62,7 +64,8 @@ public class VendorExportService {
             ChargeTransactionRepository c, RequestHistoryRepository h, SecurityService s, AuditService a,
             @Value("${app.vendor.output-directory}") String directory,
             @Value("${app.vendor.delivery-sol-id}") String sol, @Value("${app.vendor.delivery-address}") String address,
-            @Value("${app.vendor.scheme-code-override:}") String scheme) {
+            @Value("${app.vendor.scheme-code-override:}") String scheme,
+            VendorWorkflowProperties workflow) {
         batches = b;
         items = i;
         requests = r;
@@ -70,6 +73,7 @@ public class VendorExportService {
         history = h;
         security = s;
         audit = a;
+        this.workflow = workflow;
         outputDirectory = Path.of(directory).toAbsolutePath().normalize();
         deliverySol = sol;
         deliveryAddress = address;
@@ -94,7 +98,7 @@ public class VendorExportService {
                 .toList();
         for (ChequeRequest r : selected) {
             if (r.getStatus() != RequestStatus.APPROVED
-                    || !charges.existsByRequestRequestNumberAndStatus(r.getRequestNumber(), DebitStatus.SUCCESSFUL)
+                    || !financiallyReady(r)
                     || items.existsByRequestRequestNumber(r.getRequestNumber()))
                 throw new ApiException(HttpStatus.CONFLICT, "REQUEST_NOT_EXPORTABLE",
                         r.getRequestNumber() + " is not eligible for export.");
@@ -162,12 +166,51 @@ public class VendorExportService {
         return batchMap(b);
     }
 
+    @Transactional
     public Map<String, Object> confirmPrinted(String batchNumber) {
         security.requirePermission(Permissions.EXPORT_VENDOR);
         security.requirePermission(Permissions.PROCESS_REQUEST);
-        batch(batchNumber);
-        throw new ApiException(HttpStatus.CONFLICT, "VENDOR_PRINT_RESPONSE_REQUIRED",
-                "Upload the vendor print response with cheque serial ranges instead of confirming printing manually.");
+        if (workflow.finacleRegistrationEnabled()) {
+            batch(batchNumber);
+            throw new ApiException(HttpStatus.CONFLICT, "VENDOR_PRINT_RESPONSE_REQUIRED",
+                    "Upload the vendor print response with cheque serial ranges instead of confirming printing manually.");
+        }
+        VendorExportBatch b = lockedBatch(batchNumber);
+        if (!VendorExportBatch.STATUS_SENT.equals(b.getStatus()))
+            throw new ApiException(HttpStatus.CONFLICT, "INVALID_BATCH_STATUS",
+                    "Only a batch sent to the vendor can be marked as printed.");
+
+        List<VendorExportItem> batchItems = items.findByBatchBatchNumberOrderByIdAsc(batchNumber);
+        if (batchItems.size() != b.getRecordCount())
+            throw new ApiException(HttpStatus.CONFLICT, "INCOMPLETE_VENDOR_BATCH",
+                    "The vendor batch does not contain its expected number of requests.");
+
+        List<ChequeRequest> batchRequests = batchItems.stream()
+                .map(item -> requests.findByRequestNumberForUpdate(item.getRequest().getRequestNumber())
+                        .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "REQUEST_NOT_FOUND",
+                                "A request in vendor batch " + batchNumber + " was not found.")))
+                .toList();
+        for (ChequeRequest request : batchRequests) {
+            if (request.getStatus() != RequestStatus.SENT_TO_VENDOR)
+                throw new ApiException(HttpStatus.CONFLICT, "INVALID_STATUS_TRANSITION",
+                        request.getRequestNumber() + " is not waiting for vendor printing confirmation.");
+        }
+
+        StaffUser actor = security.user();
+        for (ChequeRequest request : batchRequests) {
+            request.setStatus(RequestStatus.PRINTED);
+            history.save(new RequestHistory(request, RequestStatus.SENT_TO_VENDOR.name(), RequestStatus.PRINTED.name(),
+                    actor.getFullName(), "Vendor printing confirmed for batch " + batchNumber + "."));
+        }
+        b.confirmPrinted();
+        audit.record("VENDOR_BATCH_PRINTED", "VENDOR_EXPORT", batchNumber,
+                "Marked " + batchRequests.size() + " request(s) as printed.");
+        return batchMap(b);
+    }
+
+    public Map<String, Object> capabilities() {
+        security.requirePermission(Permissions.EXPORT_VENDOR);
+        return Map.of("finacleRegistrationEnabled", workflow.finacleRegistrationEnabled());
     }
 
     public List<Map<String, Object>> list() {
@@ -192,6 +235,7 @@ public class VendorExportService {
         try {
             Files.createDirectories(outputDirectory);
             try (XSSFWorkbook wb = new XSSFWorkbook()) {
+                String[] workbookHeaders = workbookHeaders();
                 var sheet = wb.createSheet("Sheet1");
                 sheet.createFreezePane(0, 1);
                 CellStyle header = wb.createCellStyle();
@@ -203,21 +247,21 @@ public class VendorExportService {
                 CellStyle text = wb.createCellStyle();
                 text.setDataFormat(wb.createDataFormat().getFormat("@"));
                 var hr = sheet.createRow(0);
-                for (int c = 0; c < HEADERS.length; c++) {
+                for (int c = 0; c < workbookHeaders.length; c++) {
                     var cell = hr.createCell(c);
-                    cell.setCellValue(HEADERS[c]);
+                    cell.setCellValue(workbookHeaders[c]);
                     cell.setCellStyle(header);
                 }
                 for (int x = 0; x < rows.size(); x++) {
                     var row = sheet.createRow(x + 1);
                     String[] values = rows.get(x).row(x + 1);
-                    for (int c = 0; c < values.length; c++) {
+                    for (int c = 0; c < workbookHeaders.length; c++) {
                         var cell = row.createCell(c);
                         cell.setCellStyle(text);
                         cell.setCellValue(values[c] == null ? "" : values[c]);
                     }
                 }
-                for (int c = 0; c < HEADERS.length; c++) {
+                for (int c = 0; c < workbookHeaders.length; c++) {
                     sheet.autoSizeColumn(c);
                     sheet.setColumnWidth(c, Math.min(Math.max(sheet.getColumnWidth(c) + 512, 3000), 15000));
                 }
@@ -234,6 +278,12 @@ public class VendorExportService {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "EXPORT_GENERATION_FAILED",
                     "The vendor workbook could not be generated.", true);
         }
+    }
+
+    String[] workbookHeaders() {
+        return workflow.finacleRegistrationEnabled()
+                ? HEADERS.clone()
+                : Arrays.copyOf(HEADERS, HEADERS.length - 2);
     }
 
     private void deleteWorkbookIfTransactionRollsBack(Path workbook) {
@@ -299,6 +349,11 @@ public class VendorExportService {
                     request.getRequestNumber()
                             + " has no cheque type. Backfill it before creating a vendor export.");
         return request.getChequeType().code();
+    }
+
+    boolean financiallyReady(ChequeRequest request) {
+        return !request.requiresCustomerDebit()
+                || charges.existsByRequestRequestNumberAndStatus(request.getRequestNumber(), DebitStatus.SUCCESSFUL);
     }
 
     public record Download(String fileName, ByteArrayResource resource) {

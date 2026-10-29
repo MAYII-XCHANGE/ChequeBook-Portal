@@ -20,6 +20,7 @@ export const approvalApi = {
 };
 
 const paths = {
+  [REQUEST_STATUS.PRINTED]: 'dispatch',
   [REQUEST_STATUS.FINACLE_REGISTERED]: 'dispatch',
 };
 

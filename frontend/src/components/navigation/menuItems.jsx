@@ -7,7 +7,7 @@ import {
   Gauge,
   PlusCircle,
   Settings2,
-  ShieldCheck,
+  //ShieldCheck,
   UserCog,
 } from "lucide-react";
 import { hasPermission, PERMISSIONS } from "../../constants/access";
@@ -68,12 +68,12 @@ const menuItems = [
     icon: Building2,
     permission: PERMISSIONS.BRANCH_MANAGEMENT,
   },
-  {
-    label: "Role Management",
-    to: "/administration/roles",
-    icon: ShieldCheck,
-    permission: PERMISSIONS.ROLE_MANAGEMENT,
-  },
+  // {
+  //   label: "Role Management",
+  //   to: "/administration/roles",
+  //   icon: ShieldCheck,
+  //   permission: PERMISSIONS.ROLE_MANAGEMENT,
+  // },
   
 ];
 

@@ -3,6 +3,8 @@ package com.example.chequebookrequestportal.export;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.example.chequebookrequestportal.common.ApiException;
 import com.example.chequebookrequestportal.request.ChequeBookResponse;
@@ -17,12 +19,27 @@ class VendorPrintWorkflowServiceTest {
     private VendorPrintPersistenceService persistence;
     private ChequeBookService chequeBooks;
     private VendorPrintWorkflowService service;
+    private VendorWorkflowProperties workflow;
 
     @BeforeEach
     void setUp() {
         persistence = Mockito.mock(VendorPrintPersistenceService.class);
         chequeBooks = Mockito.mock(ChequeBookService.class);
-        service = new VendorPrintWorkflowService(persistence, chequeBooks, Mockito.mock(SecurityService.class));
+        workflow = Mockito.mock(VendorWorkflowProperties.class);
+        when(workflow.finacleRegistrationEnabled()).thenReturn(true);
+        service = new VendorPrintWorkflowService(persistence, chequeBooks, Mockito.mock(SecurityService.class),
+                workflow);
+    }
+
+    @Test
+    void blocksFinacleRegistrationActionsWhenTheWorkflowIsDisabled() {
+        when(workflow.finacleRegistrationEnabled()).thenReturn(false);
+
+        ApiException exception = assertThrows(ApiException.class, () -> service.retry("CBR-001"));
+
+        assertEquals("FINACLE_REGISTRATION_DISABLED", exception.getCode());
+        verify(persistence, never()).beginRegistration(Mockito.any(), Mockito.anyBoolean());
+        verify(chequeBooks, never()).requestChequeBook(Mockito.any(), Mockito.anyInt(), Mockito.any(), Mockito.any());
     }
 
     @Test

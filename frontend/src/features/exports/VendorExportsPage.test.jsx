@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../services/api/exportApi', () => ({
   exportApi: {
-    eligible: vi.fn(), list: vi.fn(), create: vi.fn(), download: vi.fn(), confirmSent: vi.fn(),
+    eligible: vi.fn(), list: vi.fn(), capabilities: vi.fn(), create: vi.fn(), download: vi.fn(),
+    confirmSent: vi.fn(), confirmPrinted: vi.fn(),
     importPrintResponse: vi.fn(), importPrintResponseWorkbook: vi.fn(), printResponse: vi.fn(), retryRegistration: vi.fn(),
     reconcileRegistration: vi.fn(),
   },
@@ -34,6 +35,7 @@ describe('VendorExportsPage print-response workflow', () => {
     vi.clearAllMocks();
     exportApi.eligible.mockResolvedValue({ data: [] });
     exportApi.list.mockResolvedValue(batches);
+    exportApi.capabilities.mockResolvedValue({ finacleRegistrationEnabled: true });
     exportApi.printResponse.mockResolvedValue({ data: [] });
   });
 
@@ -43,6 +45,25 @@ describe('VendorExportsPage print-response workflow', () => {
     expect(await screen.findAllByRole('button', { name: 'Upload vendor response' })).toHaveLength(1);
     expect(screen.queryByRole('button', { name: 'Confirm printed' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'View serial allocations' })).toBeInTheDocument();
+  });
+
+  it('confirms the complete batch in manual printing mode', async () => {
+    exportApi.capabilities.mockResolvedValue({ finacleRegistrationEnabled: false });
+    exportApi.confirmPrinted.mockResolvedValue({ batchNumber: 'VEX-SENT', status: 'PRINTED' });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm printed' }));
+    expect(screen.getByRole('dialog', { name: 'Confirm vendor printing' })).toHaveTextContent('VEX-SENT');
+    expect(screen.getByRole('dialog', { name: 'Confirm vendor printing' })).toHaveTextContent(
+      'All 1 request in this batch will be marked as printed.',
+    );
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Confirm vendor printing' }))
+      .getByRole('button', { name: 'Confirm printed' }));
+
+    await waitFor(() => expect(exportApi.confirmPrinted).toHaveBeenCalledWith('VEX-SENT'));
+    expect(requestNotificationRefresh).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'Upload vendor response' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'View serial allocations' })).not.toBeInTheDocument();
   });
 
   it('opens and cancels the upload without submitting', async () => {

@@ -5,11 +5,14 @@ export const chequeRequestApi = {
     apiRequest(`/cheque-requests${queryString(filters)}`),
   getRequestById: (id) =>
     apiRequest(`/cheque-requests/${encodeURIComponent(id)}`),
-  createRequest: ({ accountNumber, leafCount, chequeType }) =>
-    apiRequest('/cheque-requests', {
+  createRequest: ({ accountNumber, leafCount, chequeType }) => {
+    const body = { leafCount, chequeType };
+    if (chequeType !== '03') body.accountNumber = accountNumber;
+    return apiRequest('/cheque-requests', {
       method: 'POST',
-      body: JSON.stringify({ accountNumber, leafCount, chequeType }),
-    }),
+      body: JSON.stringify(body),
+    });
+  },
   confirmBranchReceipt: (id) =>
     apiRequest(`/cheque-requests/${encodeURIComponent(id)}/receive-at-branch`, {
       method: 'POST',

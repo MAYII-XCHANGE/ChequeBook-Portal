@@ -160,7 +160,13 @@ export function RequestDetailPage() {
     ["Starting cheque number", request.startChequeNumber || "Not assigned"],
     ["Ending cheque number", request.endChequeNumber || "Not assigned"],
     ["Vendor reference", request.vendorReference || "Not assigned"],
-    ["Finacle registration", request.finacleRegistrationStatus || "Not started"],
+    ["Debit status", request.debitStatus === "NOT_REQUIRED" ? "Not required" : request.debitStatus || "Not started"],
+    ["Charge amount", request.chargeAmount === "NOT_REQUIRED" ? "Not required" : request.chargeAmount || "Not available"],
+    ["VAT amount", request.vatAmount === "NOT_REQUIRED" ? "Not required" : request.vatAmount || "Not available"],
+    ["Total debit", request.totalDebit === "NOT_REQUIRED" ? "Not required" : request.totalDebit || "Not available"],
+    ...(request.finacleRegistrationEnabled
+      ? [["Finacle registration", request.finacleRegistrationStatus || "Not started"]]
+      : []),
     [
       "Domicile Branch",
       formatBranch(
@@ -341,7 +347,9 @@ export function RequestDetailPage() {
               onChange={(event) => setIdentityVerified(event.target.checked)}
               disabled={delivering}
             />
-            <span>Customer identity has been verified</span>
+            <span>{request.chequeTypeCode === "03"
+              ? "The authorized receiving officer has been verified"
+              : "Customer identity has been verified"}</span>
           </label>
           <label className="flex items-start gap-3 text-sm text-slate-700">
             <input
@@ -351,7 +359,9 @@ export function RequestDetailPage() {
               onChange={(event) => setHandoverConfirmed(event.target.checked)}
               disabled={delivering}
             />
-            <span>Cheque book has been handed to the customer</span>
+            <span>{request.chequeTypeCode === "03"
+              ? "Manager's Cheque stock has been handed into branch custody"
+              : "Cheque book has been handed to the customer"}</span>
           </label>
           <div>
             <label htmlFor="account-last-four" className="block text-sm font-semibold text-slate-700">
@@ -383,7 +393,9 @@ export function RequestDetailPage() {
             )}
           </div>
           <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
-            This action is final and cannot be undone. Only confirm delivery after the cheque book has been handed to the customer.
+            {request.chequeTypeCode === "03"
+              ? "This action is final and cannot be undone. Confirm only after the Manager's Cheque stock has been handed into authorized branch custody."
+              : "This action is final and cannot be undone. Only confirm delivery after the cheque book has been handed to the customer."}
           </p>
         </form>
       </Modal>

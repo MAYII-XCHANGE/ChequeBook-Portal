@@ -230,7 +230,7 @@ public class VendorPrintPersistenceService {
             if (item != null) validateSnapshot(row, item, prefix, errors);
             String type = trim(row.chequeType());
             try { ChequeType.fromCode(type); }
-            catch (IllegalArgumentException exception) { errors.add(prefix + "cheque type must be 01 or 02."); }
+            catch (IllegalArgumentException exception) { errors.add(prefix + "cheque type must be 01, 02 or 03."); }
             int leaves = row.numberOfLeaves() == null ? 0 : row.numberOfLeaves();
             String start = trim(row.rangeStart());
             String end = trim(row.rangeStop());

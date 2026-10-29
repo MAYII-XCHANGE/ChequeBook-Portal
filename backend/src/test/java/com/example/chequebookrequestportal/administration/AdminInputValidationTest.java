@@ -28,13 +28,23 @@ class AdminInputValidationTest {
     void branchRequiresAddressAndSortCodeWithoutRestrictingSortCodeFormat() {
         AdminController.BranchInput valid = new AdminController.BranchInput(
                 "001", "Victoria Island", "23 Kofo Abayomi Street", "SORT-CODE-A",
-                "CHARGE-GL", "VAT-GL");
+                "CHARGE-GL", "VAT-GL", "0123456789");
         assertThat(validator.validate(valid)).isEmpty();
 
         AdminController.BranchInput missing = new AdminController.BranchInput(
-                "001", "Victoria Island", " ", " ", "CHARGE-GL", "VAT-GL");
+                "001", "Victoria Island", " ", " ", "CHARGE-GL", "VAT-GL", "0123456789");
         assertThat(validator.validate(missing)).extracting(violation -> violation.getPropertyPath().toString())
                 .contains("address", "sortCode");
+    }
+
+    @Test
+    void branchRequiresATenDigitManagersChequeAccount() {
+        AdminController.BranchInput input = new AdminController.BranchInput(
+                "001", "Victoria Island", "23 Kofo Abayomi Street", "SORT-CODE-A",
+                "CHARGE-GL", "VAT-GL", "12345");
+
+        assertThat(validator.validate(input)).extracting(violation -> violation.getPropertyPath().toString())
+                .contains("managersChequeAccount");
     }
 
     @Test

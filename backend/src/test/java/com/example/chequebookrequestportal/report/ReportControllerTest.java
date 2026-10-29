@@ -53,6 +53,8 @@ class ReportControllerTest {
         String csv = new String(response.getBody(), StandardCharsets.UTF_8);
 
         assertThat(csv).contains("Account Ownership", "Cheque Type", "Initiated By", "Total Debit");
+        assertThat(csv).doesNotContain("Starting Cheque Number", "Ending Cheque Number",
+                "Finacle Registration Status");
         assertThat(csv).contains("\"0123456789\"");
         assertThat(csv).doesNotContain("****", "••••");
         assertThat(csv).contains("\"01 — Individual Current Account\"", "\"CSO User\"", "\"1075.00\"", "\"NGN\"");

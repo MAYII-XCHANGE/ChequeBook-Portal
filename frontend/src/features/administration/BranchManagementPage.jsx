@@ -9,6 +9,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { ErrorState, LoadingState } from "../../components/ui/PageState";
 import { useAsync } from "../../hooks/useAsync";
 import { adminApi } from "../../services/api/adminApi";
+import { maskAccount } from "../../utils/formatters";
 import {
   ManagementTable,
   PaginationControls,
@@ -23,6 +24,7 @@ const emptyBranch = {
   sortCode: "",
   chargeGlAccount: "",
   vatGlAccount: "",
+  managersChequeAccount: "",
 };
 
 export function BranchManagementPage() {
@@ -51,6 +53,7 @@ export function BranchManagementPage() {
       sortCode: branch.sortCode || "",
       chargeGlAccount: branch.chargeGlAccount || "",
       vatGlAccount: branch.vatGlAccount || "",
+      managersChequeAccount: branch.managersChequeAccount || "",
     });
     setErrors({});
     setModalMode("edit");
@@ -73,6 +76,9 @@ export function BranchManagementPage() {
     if (!draft.sortCode.trim()) nextErrors.sortCode = "Enter the branch sort code.";
     if (!draft.chargeGlAccount.trim()) nextErrors.chargeGlAccount = "Enter the branch charge GL account.";
     if (!draft.vatGlAccount.trim()) nextErrors.vatGlAccount = "Enter the branch VAT GL account.";
+    if (!/^\d{10}$/.test(draft.managersChequeAccount.trim())) {
+      nextErrors.managersChequeAccount = "Enter the 10-digit Manager's Cheque account.";
+    }
     if (draft.chargeGlAccount.trim().toLowerCase() === draft.vatGlAccount.trim().toLowerCase()) {
       nextErrors.vatGlAccount = "The VAT GL must be different from the charge GL.";
     }
@@ -100,6 +106,7 @@ export function BranchManagementPage() {
       sortCode: draft.sortCode.trim(),
       chargeGlAccount: draft.chargeGlAccount.trim().toUpperCase(),
       vatGlAccount: draft.vatGlAccount.trim().toUpperCase(),
+      managersChequeAccount: draft.managersChequeAccount.trim(),
     };
 
     setWorking(true);
@@ -160,13 +167,14 @@ export function BranchManagementPage() {
         ) : (
           <>
             <ManagementTable
-              headers={["Branch code", "Branch name", "Charge GL", "VAT GL", "Sort code", "Address", "Status", "Action"]}
-              minWidth="1180px"
+              headers={["Branch code", "Branch name", "Manager's Cheque account", "Charge GL", "VAT GL", "Sort code", "Address", "Status", "Action"]}
+              minWidth="1320px"
               rows={pagination.paginatedItems.map((branch) => ({
                 id: branch.id,
                 cells: [
                   <span key="code" className="font-semibold text-ink">{branch.code}</span>,
                   branch.name,
+                  branch.managersChequeAccount ? maskAccount(branch.managersChequeAccount) : "Not configured",
                   branch.chargeGlAccount || "Not configured",
                   branch.vatGlAccount || "Not configured",
                   branch.sortCode || "—",
@@ -232,6 +240,7 @@ export function BranchManagementPage() {
           <BranchField label="Sort code" name="sortCode" draft={draft} errors={errors} setDraft={setDraft} />
           <BranchField label="Cheque charge GL account" name="chargeGlAccount" draft={draft} errors={errors} setDraft={setDraft} />
           <BranchField label="VAT GL account" name="vatGlAccount" draft={draft} errors={errors} setDraft={setDraft} />
+          <BranchField label="Manager's Cheque account" name="managersChequeAccount" draft={draft} errors={errors} setDraft={setDraft} numeric maxLength={10} />
           <BranchField label="Address" name="address" draft={draft} errors={errors} setDraft={setDraft} />
           <button type="submit" className="hidden" aria-hidden="true" />
         </form>
@@ -259,7 +268,17 @@ export function BranchManagementPage() {
   );
 }
 
-function BranchField({ label, name, draft, errors, setDraft, disabled = false, required = true }) {
+function BranchField({
+  label,
+  name,
+  draft,
+  errors,
+  setDraft,
+  disabled = false,
+  required = true,
+  numeric = false,
+  maxLength,
+}) {
   return (
     <FormField label={label} htmlFor={`branch-${name}`} error={errors[name]} required={required}>
       <input
@@ -268,7 +287,12 @@ function BranchField({ label, name, draft, errors, setDraft, disabled = false, r
         value={draft[name]}
         disabled={disabled}
         required={required}
-        onChange={(event) => setDraft({ ...draft, [name]: event.target.value })}
+        inputMode={numeric ? "numeric" : undefined}
+        maxLength={maxLength}
+        onChange={(event) => setDraft({
+          ...draft,
+          [name]: numeric ? event.target.value.replace(/\D/g, "") : event.target.value,
+        })}
       />
     </FormField>
   );

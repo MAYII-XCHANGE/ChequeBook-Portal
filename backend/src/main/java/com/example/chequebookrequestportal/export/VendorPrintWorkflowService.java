@@ -16,17 +16,20 @@ public class VendorPrintWorkflowService {
     private final VendorPrintPersistenceService persistence;
     private final ChequeBookService chequeBooks;
     private final SecurityService security;
+    private final VendorWorkflowProperties workflow;
 
     public VendorPrintWorkflowService(VendorPrintPersistenceService persistence, ChequeBookService chequeBooks,
-            SecurityService security) {
+            SecurityService security, VendorWorkflowProperties workflow) {
         this.persistence = persistence;
         this.chequeBooks = chequeBooks;
         this.security = security;
+        this.workflow = workflow;
     }
 
     public Map<String, Object> importAndRegister(String batchNumber, VendorPrintResponseInput input) {
         security.requirePermission(Permissions.EXPORT_VENDOR);
         security.requirePermission(Permissions.PROCESS_REQUEST);
+        requireFinacleRegistration();
         VendorPrintPersistenceService.ImportResult imported = persistence.importRows(batchNumber, input.rows());
         List<Map<String, Object>> registrationResults = new ArrayList<>();
         for (String requestNumber : imported.registrations())
@@ -40,15 +43,26 @@ public class VendorPrintWorkflowService {
 
     public Map<String, Object> retry(String requestNumber) {
         security.requirePermission(Permissions.PROCESS_REQUEST);
+        requireFinacleRegistration();
         return register(requestNumber, true);
     }
 
     public Map<String, Object> reconcile(String requestNumber, FinacleReconciliationInput input) {
+        security.requirePermission(Permissions.PROCESS_REQUEST);
+        requireFinacleRegistration();
         return persistence.reconcile(requestNumber, input);
     }
 
     public List<Map<String, Object>> batchAllocations(String batchNumber) {
+        security.requirePermission(Permissions.EXPORT_VENDOR);
+        requireFinacleRegistration();
         return persistence.batchAllocations(batchNumber);
+    }
+
+    private void requireFinacleRegistration() {
+        if (!workflow.finacleRegistrationEnabled())
+            throw new ApiException(org.springframework.http.HttpStatus.CONFLICT, "FINACLE_REGISTRATION_DISABLED",
+                    "Vendor response import and Finacle registration are disabled for the current workflow.");
     }
 
     private Map<String, Object> register(String requestNumber, boolean retry) {

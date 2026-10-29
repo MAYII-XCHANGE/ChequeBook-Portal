@@ -64,28 +64,37 @@ public class ReportController {
         LocalDate end = parseDate(to, "to");
         parseDate(from, "from");
         List<Map<String, Object>> rows = rows(branch, from, end, true);
+        boolean includeFinacleRegistration = requests.finacleRegistrationEnabled();
         StringBuilder csv = new StringBuilder(
-                "Request ID,Customer Name,Account Number,Account Ownership,Cheque Type,Starting Cheque Number,"
-                        + "Ending Cheque Number,Vendor Reference,Finacle Registration Status,Domicile Branch,Domicile Branch Code,"
+                "Request ID,Customer Name,Account Number,Account Ownership,Cheque Type,"
+                        + (includeFinacleRegistration
+                                ? "Starting Cheque Number,Ending Cheque Number," : "")
+                        + "Vendor Reference,"
+                        + (includeFinacleRegistration ? "Finacle Registration Status," : "")
+                        + "Domicile Branch,Domicile Branch Code,"
                         + "Initiating Branch,Initiating Branch Code,Initiated By,Leaf Count,Booklet Count,"
                         + "Created Date,Status,Debit Status,Charge Amount,VAT Amount,Total Debit,Currency\r\n");
         for (var row : rows) {
             csv.append(q(row.get("id"))).append(',').append(q(row.get("customer"))).append(',')
                 .append(q(row.get("accountNumber"))).append(',').append(q(row.get("acctOwnership"))).append(',')
-                .append(q(row.get("chequeType"))).append(',')
-                .append(q(row.get("startChequeNumber"))).append(',')
-                .append(q(row.get("endChequeNumber"))).append(',')
-                .append(q(row.get("vendorReference"))).append(',')
-                .append(q(row.get("finacleRegistrationStatus"))).append(',')
-                .append(q(row.get("accountHomeBranch"))).append(',')
+                .append(q(row.get("chequeType"))).append(',');
+            if (includeFinacleRegistration)
+                csv.append(q(row.get("startChequeNumber"))).append(',')
+                        .append(q(row.get("endChequeNumber"))).append(',');
+            csv.append(q(row.get("vendorReference"))).append(',');
+            if (includeFinacleRegistration)
+                csv.append(q(row.get("finacleRegistrationStatus"))).append(',');
+            csv.append(q(row.get("accountHomeBranch"))).append(',')
                 .append(q(row.get("accountHomeBranchCode"))).append(',')
                 .append(q(row.get("servicingBranch"))).append(',')
                 .append(q(row.get("servicingBranchCode"))).append(',')
                 .append(q(row.get("createdBy"))).append(',').append(q(row.get("leafCount"))).append(',')
                 .append(q(row.get("bookletCount"))).append(',').append(q(displayDate(row.get("createdAt"))))
                 .append(',').append(q(statusLabel(row.get("status")))).append(',')
-                .append(q(row.get("debitStatus"))).append(',').append(q(row.get("chargeAmount"))).append(',')
-                .append(q(row.get("vatAmount"))).append(',').append(q(row.get("totalDebit"))).append(',')
+                .append(q(financialValue(row.get("debitStatus")))).append(',')
+                .append(q(financialValue(row.get("chargeAmount")))).append(',')
+                .append(q(financialValue(row.get("vatAmount")))).append(',')
+                .append(q(financialValue(row.get("totalDebit")))).append(',')
                 .append(q(row.get("currency"))).append("\r\n");
         }
         String reportScope = branch == null || branch.isBlank() ? "AUTHORIZED_BRANCHES" : branch;
@@ -143,6 +152,10 @@ public class ReportController {
 
     private String valueOrAll(String value) {
         return value == null || value.isBlank() ? "all dates" : value;
+    }
+
+    private Object financialValue(Object value) {
+        return "NOT_REQUIRED".equals(String.valueOf(value)) ? "Not required" : value;
     }
 
     private String filename(String branch, String from, String to) {

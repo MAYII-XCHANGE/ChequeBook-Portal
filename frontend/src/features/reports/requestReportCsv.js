@@ -2,10 +2,10 @@ import { STATUS_CONFIG } from '../../constants/status';
 import { formatChequeType } from '../../constants/workflow';
 import { formatDate } from '../../utils/formatters';
 
-const headers = [
+const baseHeaders = [
   'Request ID', 'Customer Name', 'Account Number', 'Account Ownership',
   'Cheque Type',
-  'Starting Cheque Number', 'Ending Cheque Number', 'Vendor Reference', 'Finacle Registration Status',
+  'Starting Cheque Number', 'Ending Cheque Number', 'Vendor Reference',
   'Domicile Branch', 'Domicile Branch Code', 'Initiating Branch', 'Initiating Branch Code',
   'Initiated By', 'Leaf Count', 'Booklet Count', 'Created Date', 'Status', 'Debit Status',
   'Charge Amount', 'VAT Amount', 'Total Debit', 'Currency',
@@ -18,10 +18,17 @@ const csvCell = (value) => {
   return `"${safe.replaceAll('"', '""')}"`;
 };
 
+const financialValue = (value) => value === 'NOT_REQUIRED' ? 'Not required' : value;
+
 export function buildRequestReportCsv(rows) {
+  const includeFinacleRegistration = rows.length === 0
+    || rows.some((row) => row.finacleRegistrationEnabled !== false);
+  const headers = [...baseHeaders];
+  if (!includeFinacleRegistration) headers.splice(5, 2);
+  if (includeFinacleRegistration) headers.splice(8, 0, 'Finacle Registration Status');
   const lines = [headers.join(',')];
   for (const row of rows) {
-    lines.push([
+    const values = [
       row.id,
       row.customer,
       row.accountNumber,
@@ -30,7 +37,6 @@ export function buildRequestReportCsv(rows) {
       row.startChequeNumber,
       row.endChequeNumber,
       row.vendorReference,
-      row.finacleRegistrationStatus,
       row.accountHomeBranch,
       row.accountHomeBranchCode,
       row.servicingBranch || row.branch,
@@ -40,12 +46,15 @@ export function buildRequestReportCsv(rows) {
       row.bookletCount,
       formatDate(row.createdAt),
       STATUS_CONFIG[row.status]?.label || row.status || 'Unknown',
-      row.debitStatus,
-      row.chargeAmount,
-      row.vatAmount,
-      row.totalDebit,
+      financialValue(row.debitStatus),
+      financialValue(row.chargeAmount),
+      financialValue(row.vatAmount),
+      financialValue(row.totalDebit),
       row.currency,
-    ].map(csvCell).join(','));
+    ];
+    if (!includeFinacleRegistration) values.splice(5, 2);
+    if (includeFinacleRegistration) values.splice(8, 0, row.finacleRegistrationStatus);
+    lines.push(values.map(csvCell).join(','));
   }
   return `${lines.join('\r\n')}\r\n`;
 }

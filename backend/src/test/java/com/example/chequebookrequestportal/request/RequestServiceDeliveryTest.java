@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.example.chequebookrequestportal.audit.AuditService;
 import com.example.chequebookrequestportal.common.ApiException;
+import com.example.chequebookrequestportal.corebanking.managerscheque.ManagersChequeAccountService;
 import com.example.chequebookrequestportal.corebanking.service.CoreBankingService;
 import com.example.chequebookrequestportal.domain.Branch;
 import com.example.chequebookrequestportal.domain.ChequeRequest;
@@ -20,6 +21,7 @@ import com.example.chequebookrequestportal.domain.RequestHistory;
 import com.example.chequebookrequestportal.domain.RequestStatus;
 import com.example.chequebookrequestportal.domain.StaffUser;
 import com.example.chequebookrequestportal.email.WorkflowEmailService;
+import com.example.chequebookrequestportal.export.VendorWorkflowProperties;
 import com.example.chequebookrequestportal.repository.BranchRepository;
 import com.example.chequebookrequestportal.repository.ChargeTransactionRepository;
 import com.example.chequebookrequestportal.repository.ChequeNumberRepository;
@@ -48,6 +50,7 @@ class RequestServiceDeliveryTest {
     private AuditService audit;
     private WorkflowEmailService email;
     private RequestService service;
+    private VendorWorkflowProperties vendorWorkflow;
     private ChequeRequest request;
 
     @BeforeEach
@@ -58,6 +61,7 @@ class RequestServiceDeliveryTest {
         security = mock(SecurityService.class);
         audit = mock(AuditService.class);
         email = mock(WorkflowEmailService.class);
+        vendorWorkflow = mock(VendorWorkflowProperties.class);
 
         Branch branch = new Branch("001", "Head Office", "1 Bank Street", "001", "100", "200");
         StaffUser actor = new StaffUser("E001", "cso@novabank.ng", "Branch CSO", branch);
@@ -91,7 +95,9 @@ class RequestServiceDeliveryTest {
                 BigDecimal.valueOf(200),
                 "9999999999",
                 BigDecimal.valueOf(0.075),
-                "NGN");
+                "NGN",
+                mock(ManagersChequeAccountService.class),
+                vendorWorkflow);
     }
 
     @Test
@@ -185,35 +191,43 @@ class RequestServiceDeliveryTest {
     }
 
     @Test
-    void processingQueueExcludesRequestsAwaitingBatchPrintConfirmation() {
+    void processingQueueIncludesPrintedRequestsInManualMode() {
         service.processingQueue();
 
         verify(requests).findProcessingQueue(
                 argThat(statuses -> !statuses.contains(RequestStatus.SENT_TO_VENDOR)
-                        && !statuses.contains(RequestStatus.PRINTED)
+                        && statuses.contains(RequestStatus.PRINTED)
                         && statuses.contains(RequestStatus.FINACLE_REGISTERED)),
                 eq(DebitStatus.SUCCESSFUL));
     }
 
     @Test
-    void dispatchIsBlockedUntilFinacleRegistrationIsConfirmed() {
+    void aPrintedRequestCanBeDispatchedInManualMode() {
         request.setStatus(RequestStatus.PRINTED);
+        when(charges.existsByRequestRequestNumberAndStatus(REQUEST_NUMBER, DebitStatus.SUCCESSFUL)).thenReturn(true);
 
-        ApiException exception = assertThrows(ApiException.class, () -> service.transition(
-                REQUEST_NUMBER, RequestStatus.FINACLE_REGISTERED, RequestStatus.DISPATCHED,
-                "Chequebook dispatched to branch."));
+        service.dispatch(REQUEST_NUMBER);
 
-        assertEquals("INVALID_STATUS_TRANSITION", exception.getCode());
-        assertEquals(RequestStatus.PRINTED, request.getStatus());
+        assertEquals(RequestStatus.DISPATCHED, request.getStatus());
     }
 
     @Test
-    void aFinacleRegisteredRequestCanBeDispatched() {
+    void aFinacleRegisteredRequestCanBeDispatchedWhenFinacleRegistrationIsEnabled() {
+        when(vendorWorkflow.finacleRegistrationEnabled()).thenReturn(true);
         request.setStatus(RequestStatus.FINACLE_REGISTERED);
         when(charges.existsByRequestRequestNumberAndStatus(REQUEST_NUMBER, DebitStatus.SUCCESSFUL)).thenReturn(true);
 
-        service.transition(REQUEST_NUMBER, RequestStatus.FINACLE_REGISTERED, RequestStatus.DISPATCHED,
-                "Chequebook dispatched to branch.");
+        service.dispatch(REQUEST_NUMBER);
+
+        assertEquals(RequestStatus.DISPATCHED, request.getStatus());
+    }
+
+    @Test
+    void anAlreadyRegisteredRequestRemainsDispatchableAfterSwitchingToManualMode() {
+        request.setStatus(RequestStatus.FINACLE_REGISTERED);
+        when(charges.existsByRequestRequestNumberAndStatus(REQUEST_NUMBER, DebitStatus.SUCCESSFUL)).thenReturn(true);
+
+        service.dispatch(REQUEST_NUMBER);
 
         assertEquals(RequestStatus.DISPATCHED, request.getStatus());
     }

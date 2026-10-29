@@ -4,6 +4,7 @@ import com.example.chequebookrequestportal.audit.AuditService;
 import com.example.chequebookrequestportal.common.ApiException;
 import com.example.chequebookrequestportal.common.BusinessIdentifier;
 import com.example.chequebookrequestportal.common.Permissions;
+import com.example.chequebookrequestportal.corebanking.managerscheque.ManagersChequeAccountService;
 import com.example.chequebookrequestportal.corebanking.dto.request.InternalTransferRequest;
 import com.example.chequebookrequestportal.corebanking.dto.request.ChequeBookChargePosting;
 import com.example.chequebookrequestportal.corebanking.dto.response.InternalTransferResponse;
@@ -15,11 +16,13 @@ import com.example.chequebookrequestportal.domain.ChequeRequest;
 import com.example.chequebookrequestportal.domain.ChequeType;
 import com.example.chequebookrequestportal.domain.ChequeNumber;
 import com.example.chequebookrequestportal.domain.DebitStatus;
+import com.example.chequebookrequestportal.domain.DebitPolicy;
 import com.example.chequebookrequestportal.domain.EligibilityRecord;
 import com.example.chequebookrequestportal.domain.RequestHistory;
 import com.example.chequebookrequestportal.domain.RequestStatus;
 import com.example.chequebookrequestportal.domain.StaffUser;
 import com.example.chequebookrequestportal.email.WorkflowEmailService;
+import com.example.chequebookrequestportal.export.VendorWorkflowProperties;
 import com.example.chequebookrequestportal.repository.ChargeTransactionRepository;
 import com.example.chequebookrequestportal.repository.BranchRepository;
 import com.example.chequebookrequestportal.repository.ChequeRequestRepository;
@@ -71,6 +74,8 @@ public class RequestService {
     private final String chargeCreditAccount;
     private final BigDecimal vatRate;
     private final String defaultCurrency;
+    private final VendorWorkflowProperties vendorWorkflow;
+    private final ManagersChequeAccountService managersChequeAccounts;
 
     public RequestService(ChequeRequestRepository r, EligibilityRepository e, RequestHistoryRepository h,
             ChargeTransactionRepository c, BranchRepository branches, ChequeNumberRepository chequeNumbers,
@@ -80,7 +85,9 @@ public class RequestService {
             @Value("${app.charges.leaves-100}") BigDecimal charge100,
             @Value("${core-banking.chequebook-credit-account}") String chargeCreditAccount,
             @Value("${vat.rate}") BigDecimal vatRate,
-            @Value("${core-banking.transaction-currency:NGN}") String defaultCurrency) {
+            @Value("${core-banking.transaction-currency:NGN}") String defaultCurrency,
+            ManagersChequeAccountService managersChequeAccounts,
+            VendorWorkflowProperties vendorWorkflow) {
         requests = r;
         eligibility = e;
         history = h;
@@ -98,6 +105,8 @@ public class RequestService {
             throw new IllegalArgumentException("vat.rate must be zero or greater");
         this.vatRate = vatRate;
         this.defaultCurrency = defaultCurrency;
+        this.managersChequeAccounts = managersChequeAccounts;
+        this.vendorWorkflow = vendorWorkflow;
     }
 
     @Transactional
@@ -105,51 +114,109 @@ public class RequestService {
         security.requirePermission(Permissions.CREATE_REQUEST);
         if (leafCount != 50 && leafCount != 100)
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_LEAF_COUNT", "Leaf count must be 50 or 100.");
-        if (requests.existsByAccountNumberAndStatusNotIn(accountNumber, TERMINAL))
-            throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE_REQUEST",
-                    "An active chequebook request already exists for this account.");
         ChequeType chequeType;
         try {
             chequeType = ChequeType.fromCode(chequeTypeCode);
         }
         catch (IllegalArgumentException exception) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_CHEQUE_TYPE",
-                    "Cheque type must be 01 or 02.");
+                    "Cheque type must be 01, 02 or 03.");
         }
         StaffUser actor = security.user();
         if (actor.getBranch() == null)
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "USER_BRANCH_REQUIRED",
                     "The initiating user must be assigned to a branch.");
-        NameEnquiryResponse account = coreBanking.nameEnquiry(accountNumber);
-        requireEligibleAccount(account);
-        String resolvedAccountNumber = valueOrDefault(account.accountNumber(), accountNumber);
-        String accountHomeBranchCode = nullableValue(account.branchCode());
-        String accountHomeBranchName = nullableValue(account.branchName());
+        Branch initiatingBranch = branches.findByCodeForUpdate(actor.getBranch().getCode()).orElseThrow(
+                () -> new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "USER_BRANCH_REQUIRED",
+                        "The initiating user's branch is unavailable."));
+        boolean managersCheque = chequeType == ChequeType.MANAGERS_CHEQUE;
+        if (managersCheque) {
+            String configuredAccount = initiatingBranch.getManagersChequeAccount();
+            if (configuredAccount == null || configuredAccount.isBlank())
+                throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "MANAGERS_CHEQUE_ACCOUNT_NOT_CONFIGURED",
+                        "A Manager's Cheque account has not been configured for your branch.");
+            if (!configuredAccount.matches("\\d{10}"))
+                throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "MANAGERS_CHEQUE_CONFIGURATION_INVALID",
+                        "The configured Manager's Cheque account must contain exactly 10 digits.");
+            accountNumber = configuredAccount;
+            if (requests.existsByBranchCodeIgnoreCaseAndChequeTypeAndStatusNotIn(
+                    initiatingBranch.getCode(), ChequeType.MANAGERS_CHEQUE, TERMINAL))
+                throw new ApiException(HttpStatus.CONFLICT, "ACTIVE_MANAGERS_CHEQUE_REQUEST_EXISTS",
+                        "Your branch already has an active Manager's Cheque request.");
+            if (requests.existsByAccountNumberAndStatusNotIn(accountNumber, TERMINAL))
+                throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE_REQUEST",
+                        "An active chequebook request already exists for this account.");
+        }
+        else {
+            if (accountNumber == null || !accountNumber.matches("\\d{10}"))
+                throw new ApiException(HttpStatus.BAD_REQUEST, "ACCOUNT_NUMBER_REQUIRED",
+                        "A 10-digit account number is required for cheque types 01 and 02.");
+            if (requests.existsByAccountNumberAndStatusNotIn(accountNumber, TERMINAL))
+                throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE_REQUEST",
+                        "An active chequebook request already exists for this account.");
+        }
         // The authenticated CSO's assigned branch owns approval, charging, fulfillment and collection.
-        String branchCode = actor.getBranch().getCode();
-        String branchName = actor.getBranch().getName();
-        String branchAddress = actor.getBranch().getAddress();
-        String sortCode = actor.getBranch().getSortCode();
-        String currency = valueOrDefault(account.currency(), defaultCurrency);
-        ChequeRequest request = new ChequeRequest(resolvedAccountNumber, account.accountName(), account.acctOwnership(),
-                account.schemeCode(), chequeType, currency, accountHomeBranchCode, accountHomeBranchName,
+        String branchCode = initiatingBranch.getCode();
+        String branchName = initiatingBranch.getName();
+        String branchAddress = initiatingBranch.getAddress();
+        String sortCode = initiatingBranch.getSortCode();
+        NameEnquiryResponse account = null;
+        String resolvedAccountNumber = accountNumber;
+        String accountName;
+        String accountOwnership;
+        String schemeCode;
+        String currency;
+        String accountHomeBranchCode;
+        String accountHomeBranchName;
+        if (managersCheque) {
+            var details = managersChequeAccounts.resolve(accountNumber, branchCode);
+            resolvedAccountNumber = details.accountNumber();
+            accountName = details.accountName();
+            accountOwnership = details.accountOwnership();
+            schemeCode = details.schemeCode();
+            currency = details.currency();
+            accountHomeBranchCode = branchCode;
+            accountHomeBranchName = branchName;
+        }
+        else {
+            account = coreBanking.nameEnquiry(accountNumber);
+            requireEligibleAccount(account);
+            resolvedAccountNumber = valueOrDefault(account.accountNumber(), accountNumber);
+            accountName = account.accountName();
+            accountOwnership = account.acctOwnership();
+            schemeCode = account.schemeCode();
+            currency = valueOrDefault(account.currency(), defaultCurrency);
+            accountHomeBranchCode = nullableValue(account.branchCode());
+            accountHomeBranchName = nullableValue(account.branchName());
+        }
+        ChequeRequest request = new ChequeRequest(resolvedAccountNumber, accountName, accountOwnership,
+                schemeCode, chequeType, currency, accountHomeBranchCode, accountHomeBranchName,
                 branchCode, branchName, branchAddress, sortCode, leafCount, actor);
         requests.save(request);
         request.assignRequestNumber(BusinessIdentifier.chequeRequest(
                 LocalDate.now(ZoneOffset.UTC), branchCode, request.getId()));
-        eligibility.save(new EligibilityRecord(request, true, account.accountStatus(), account.kycLevel(),
-                account.restrictions(), null, account.status() == null ? null : account.status().code()));
+        if (account != null)
+            eligibility.save(new EligibilityRecord(request, true, account.accountStatus(), account.kycLevel(),
+                    account.restrictions(), null, account.status() == null ? null : account.status().code()));
         boolean crossBranch = accountHomeBranchCode != null && !sameSol(branchCode, accountHomeBranchCode);
         String creationNote = crossBranch
                 ? "Cross-branch request created; Domicile Branch is "
                         + branchLabel(accountHomeBranchName, accountHomeBranchCode) + " and Initiating Branch is "
                         + branchLabel(branchName, branchCode) + "."
-                : "Request created after core-banking name enquiry succeeded.";
+                : managersCheque
+                        ? "Manager's Cheque request created from controlled branch and product configuration."
+                        : "Request created after core-banking name enquiry succeeded.";
         creationNote += " Cheque type: " + chequeType.displayName() + ".";
+        if (managersCheque)
+            creationNote += " Customer debit is not required.";
         history.save(new RequestHistory(request, null, request.getStatus().name(), actor.getFullName(), creationNote));
-        audit.record("REQUEST_CREATED", "CHEQUE_REQUEST", request.getRequestNumber(),
-                "Cheque book request created after successful name enquiry; cheque type "
+        audit.record("REQUEST_CREATED", "CHEQUE_REQUEST", request.getRequestNumber(), managersCheque
+                ? "Manager's Cheque request created from controlled configuration."
+                : "Cheque book request created after successful name enquiry; cheque type "
                         + chequeType.displayName() + ".");
+        if (managersCheque)
+            audit.record("MANAGERS_CHEQUE_CONFIGURATION_APPLIED", "CHEQUE_REQUEST", request.getRequestNumber(),
+                    "Configured branch account was verified against GAM and its returned product details were applied.");
         if (crossBranch) {
             PortalPrincipal principal = security.principal();
             audit.record("CROSS_BRANCH_REQUEST_CREATED", "CHEQUE_REQUEST", request.getRequestNumber(),
@@ -252,10 +319,19 @@ public class RequestService {
 
     public List<Map<String, Object>> processingQueue() {
         security.requirePermission(Permissions.PROCESS_REQUEST);
+        EnumSet<RequestStatus> processingStatuses = EnumSet.of(RequestStatus.APPROVED, RequestStatus.EXPORTED);
+        if (vendorWorkflow.finacleRegistrationEnabled()) {
+            processingStatuses.add(RequestStatus.FINACLE_REGISTERED);
+            processingStatuses.add(RequestStatus.FINACLE_REGISTRATION_FAILED);
+            processingStatuses.add(RequestStatus.FINACLE_REGISTRATION_REVIEW_REQUIRED);
+        }
+        else {
+            processingStatuses.add(RequestStatus.PRINTED);
+            // Keep already-registered requests dispatchable when switching an environment to manual mode.
+            processingStatuses.add(RequestStatus.FINACLE_REGISTERED);
+        }
         List<ChequeRequest> queue = new ArrayList<>(requests.findProcessingQueue(
-                EnumSet.of(RequestStatus.APPROVED, RequestStatus.EXPORTED, RequestStatus.FINACLE_REGISTERED,
-                        RequestStatus.FINACLE_REGISTRATION_FAILED,
-                        RequestStatus.FINACLE_REGISTRATION_REVIEW_REQUIRED),
+                processingStatuses,
                 DebitStatus.SUCCESSFUL));
         queue.addAll(requests.findByStatusOrderByCreatedAtAsc(RequestStatus.REVERSAL_REVIEW_REQUIRED));
         queue.sort(Comparator.comparing(ChequeRequest::getCreatedAt));
@@ -267,6 +343,25 @@ public class RequestService {
         request(number);
         throw new ApiException(HttpStatus.CONFLICT, "BATCH_PRINT_CONFIRMATION_REQUIRED",
                 "Printing must be confirmed from the vendor export batch.");
+    }
+
+    @Transactional
+    public Map<String, Object> dispatch(String number) {
+        security.requirePermission(Permissions.PROCESS_REQUEST);
+        ChequeRequest request = lockedRequest(number);
+        boolean dispatchable = request.getStatus() == RequestStatus.FINACLE_REGISTERED
+                || (!vendorWorkflow.finacleRegistrationEnabled() && request.getStatus() == RequestStatus.PRINTED);
+        if (!dispatchable)
+            invalidTransition(request);
+        if (!financiallyReady(request))
+            throw new ApiException(HttpStatus.CONFLICT, "DEBIT_NOT_SUCCESSFUL",
+                    "Only a request with a successful debit can be processed by Clearing Operations.");
+        transition(request, RequestStatus.DISPATCHED, security.user(), "Chequebook dispatched to branch.");
+        return Map.of("request", view(request));
+    }
+
+    public boolean finacleRegistrationEnabled() {
+        return vendorWorkflow.finacleRegistrationEnabled();
     }
 
     @Transactional
@@ -292,8 +387,15 @@ public class RequestService {
         assertBOM(r, actor);
         if (r.getStatus() != RequestStatus.PENDING_APPROVAL)
             invalidTransition(r);
-        Branch postingBranch = branchWithPostingAccounts(r);
         r.approve(actor);
+        if (!r.requiresCustomerDebit()) {
+            transition(r, RequestStatus.APPROVED, actor,
+                    "BOM approved Manager's Cheque request. Customer debit is not required; request is ready for vendor export.");
+            audit.record("MANAGERS_CHEQUE_APPROVED_NO_DEBIT", "CHEQUE_REQUEST", r.getRequestNumber(),
+                    "Manager's Cheque request approved without customer debit.");
+            return Map.of("request", view(r));
+        }
+        Branch postingBranch = branchWithPostingAccounts(r);
         transition(r, RequestStatus.DEBIT_PENDING, actor, "BOM approved; customer debit initiated.");
         String key = "CB-" + r.getRequestNumber() + "-" + UUID.randomUUID();
         BigDecimal chargeAmount = chargeFor(r.getLeafCount()).setScale(2, RoundingMode.HALF_UP);
@@ -396,7 +498,7 @@ public class RequestService {
         ChequeRequest r = lockedRequest(number);
         if (r.getStatus() != expected)
             invalidTransition(r);
-        if (!charges.existsByRequestRequestNumberAndStatus(number, DebitStatus.SUCCESSFUL))
+        if (!financiallyReady(r))
             throw new ApiException(HttpStatus.CONFLICT, "DEBIT_NOT_SUCCESSFUL",
                     "Only a request with a successful debit can be processed by Clearing Operations.");
         transition(r, next, security.user(), note);
@@ -443,7 +545,9 @@ public class RequestService {
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ACCOUNT_SUFFIX_MISMATCH",
                     "The delivery details could not be verified.");
         transition(request, RequestStatus.DELIVERED, security.user(),
-                "Customer identity and physical cheque-book handover confirmed by branch CSO.");
+                request.getChequeType() == ChequeType.MANAGERS_CHEQUE
+                        ? "Authorized officer and Manager's Cheque stock handover into branch custody confirmed."
+                        : "Customer identity and physical cheque-book handover confirmed by branch CSO.");
         return Map.of("request", view(request));
     }
 
@@ -660,6 +764,8 @@ public class RequestService {
         m.put("chequeTypeCode", r.getChequeType() == null ? null : r.getChequeType().code());
         m.put("chequeTypeLabel", r.getChequeType() == null ? null : r.getChequeType().label());
         m.put("chequeType", r.getChequeType() == null ? null : r.getChequeType().displayName());
+        m.put("debitPolicy", r.getDebitPolicy());
+        m.put("debitRequired", r.requiresCustomerDebit());
         m.put("branch", r.getBranchName());
         m.put("branchCode", r.getBranchCode());
         m.put("servicingBranch", r.getBranchName());
@@ -674,6 +780,14 @@ public class RequestService {
         m.put("leafCount", r.getLeafCount());
         m.put("bookletCount", r.getBookletCount());
         m.put("version", r.getVersion());
+        m.put("finacleRegistrationEnabled", vendorWorkflow.finacleRegistrationEnabled());
+        if (r.getDebitPolicy() == DebitPolicy.NOT_REQUIRED) {
+            m.put("debitStatus", "NOT_REQUIRED");
+            m.put("chargeAmount", "NOT_REQUIRED");
+            m.put("vatAmount", "NOT_REQUIRED");
+            m.put("totalDebit", "NOT_REQUIRED");
+            m.put("currency", r.getCurrency());
+        }
         if (r.getSerialAllocation() != null) {
             var allocation = r.getSerialAllocation();
             m.put("startChequeNumber", allocation.getStartChequeNumber());
@@ -701,6 +815,11 @@ public class RequestService {
                                 h.getActor(), "note", h.getNote() == null ? "" : h.getNote()))
                         .toList());
         return m;
+    }
+
+    private boolean financiallyReady(ChequeRequest request) {
+        return !request.requiresCustomerDebit()
+                || charges.existsByRequestRequestNumberAndStatus(request.getRequestNumber(), DebitStatus.SUCCESSFUL);
     }
 
     private String valueOrDefault(String value, String fallback) {

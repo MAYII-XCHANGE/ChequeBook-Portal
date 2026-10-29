@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../services/api/customerApi', () => ({
-  customerApi: { getCustomerByAccount: vi.fn() },
+  customerApi: { getCustomerByAccount: vi.fn(), getManagersChequeAccount: vi.fn() },
 }));
 
 vi.mock('../../services/api/chequeRequestApi', () => ({
@@ -43,21 +43,23 @@ const renderPage = () => render(
   </MemoryRouter>,
 );
 
-async function search(accountNumber) {
-  fireEvent.change(screen.getByLabelText(/customer account number/i), {
+async function search(accountNumber, chequeType = '01') {
+  fireEvent.change(screen.getByLabelText(/cheque type/i), { target: { value: chequeType } });
+  fireEvent.change(screen.getByLabelText(/account number/i), {
     target: { value: accountNumber },
   });
   fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
-  await screen.findByLabelText(/cheque type/i);
+  await screen.findByLabelText('50 leaves');
 }
 
 describe('NewRequestPage cheque type', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     customerApi.getCustomerByAccount.mockImplementation(async (accountNumber) => eligibleResult(accountNumber));
+    customerApi.getManagersChequeAccount.mockResolvedValue(eligibleResult('0123456789'));
   });
 
-  it('requires a cheque type and submits only its code', async () => {
+  it('submits the selected cheque type code', async () => {
     chequeRequestApi.createRequest.mockResolvedValue({
       request: {
         id: 'CBR-001',
@@ -67,11 +69,9 @@ describe('NewRequestPage cheque type', () => {
       },
     });
     renderPage();
-    await search('0123456789');
+    await search('0123456789', '02');
 
     fireEvent.click(screen.getByLabelText('50 leaves'));
-    expect(screen.getByRole('button', { name: /review request/i })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText(/cheque type/i), { target: { value: '02' } });
     fireEvent.click(screen.getByRole('button', { name: /review request/i }));
 
     expect(screen.getByRole('dialog', { name: /confirm cheque book request/i }))
@@ -84,16 +84,44 @@ describe('NewRequestPage cheque type', () => {
       chequeType: '02',
     }));
     expect(await screen.findByText('02 — Corporate Account')).toBeInTheDocument();
+    expect(customerApi.getCustomerByAccount).toHaveBeenCalledWith('0123456789', '02');
   });
 
-  it('clears the selected cheque type when another account is searched', async () => {
+  it('clears an existing lookup when the cheque type changes', async () => {
     renderPage();
     await search('0123456789');
-    fireEvent.change(screen.getByLabelText(/cheque type/i), { target: { value: '01' } });
-    expect(screen.getByLabelText(/cheque type/i)).toHaveValue('01');
+    expect(screen.getByText('Customer information')).toBeInTheDocument();
 
-    await search('0123456790');
+    fireEvent.change(screen.getByLabelText(/cheque type/i), { target: { value: '03' } });
 
-    expect(screen.getByLabelText(/cheque type/i)).toHaveValue('');
+    expect(screen.queryByText('Customer information')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/account number/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/manager's cheque account information/i)).toBeInTheDocument();
+  });
+
+  it("loads and submits the branch's configured Manager's Cheque account automatically", async () => {
+    chequeRequestApi.createRequest.mockResolvedValue({
+      request: {
+        id: 'CBR-003',
+        leafCount: 50,
+        chequeTypeCode: '03',
+        chequeTypeLabel: "Manager's Cheque",
+      },
+    });
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/cheque type/i), { target: { value: '03' } });
+
+    expect(await screen.findByText(/no customer debit will be performed after bom approval/i))
+      .toBeInTheDocument();
+    expect(customerApi.getManagersChequeAccount).toHaveBeenCalledOnce();
+    expect(customerApi.getCustomerByAccount).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByLabelText('50 leaves'));
+    fireEvent.click(screen.getByRole('button', { name: /review request/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^submit request$/i }));
+
+    await waitFor(() => expect(chequeRequestApi.createRequest).toHaveBeenCalledWith({
+      leafCount: 50,
+      chequeType: '03',
+    }));
   });
 });

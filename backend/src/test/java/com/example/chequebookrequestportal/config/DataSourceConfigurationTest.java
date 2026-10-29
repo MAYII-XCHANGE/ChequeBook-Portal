@@ -7,8 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.example.chequebookrequestportal.corebanking.eligibility.ChequeEligibilityLookup;
 import com.example.chequebookrequestportal.corebanking.eligibility.JdbcChequeEligibilityLookup;
+import com.example.chequebookrequestportal.corebanking.managerscheque.JdbcManagersChequeAccountLookup;
+import com.example.chequebookrequestportal.corebanking.managerscheque.ManagersChequeAccountLookup;
+import com.example.chequebookrequestportal.corebanking.managerscheque.ManagersChequeAccountLookup.AccountDetails;
 import java.sql.Connection;
 import java.sql.Statement;
+import java.util.List;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -17,6 +21,7 @@ class DataSourceConfigurationTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(DataSourceConfiguration.class)
             .withBean(JdbcChequeEligibilityLookup.class)
+            .withBean(JdbcManagersChequeAccountLookup.class)
             .withPropertyValues(
                     "spring.datasource.url=jdbc:h2:mem:application;DB_CLOSE_DELAY=-1",
                     "spring.datasource.username=sa",
@@ -42,13 +47,21 @@ class DataSourceConfigurationTest {
             try (Connection connection = finacleDataSource.getConnection();
                     Statement statement = connection.createStatement()) {
                 statement.execute("CREATE SCHEMA TBAADM");
-                statement.execute("CREATE TABLE TBAADM.GAM (foracid VARCHAR(20), chq_alwd_flg VARCHAR(1))");
-                statement.execute("INSERT INTO TBAADM.GAM VALUES ('1003000321', 'Y')");
+                statement.execute("CREATE TABLE TBAADM.GAM (foracid VARCHAR(20), chq_alwd_flg VARCHAR(1), "
+                        + "acct_name VARCHAR(100), acct_ownership VARCHAR(5), schm_code VARCHAR(20), "
+                        + "sol_id VARCHAR(20), acct_crncy_code VARCHAR(3), del_flg VARCHAR(1))");
+                statement.execute("INSERT INTO TBAADM.GAM VALUES "
+                        + "('1003000321', 'Y', 'Manager Cheque', 'O', '2004', '001', 'NGN', 'N')");
             }
 
             ChequeEligibilityLookup lookup = context.getBean(ChequeEligibilityLookup.class);
             assertEquals(new ChequeEligibilityLookup.Result(true, "Y"),
                     lookup.findChequeAllowedFlag("1003000321"));
+
+            ManagersChequeAccountLookup managersChequeLookup = context.getBean(ManagersChequeAccountLookup.class);
+            assertEquals(List.of(new AccountDetails(
+                    "1003000321", "Manager Cheque", "O", "2004", "NGN")),
+                    managersChequeLookup.findConfiguredAccount("1003000321"));
         });
     }
 }

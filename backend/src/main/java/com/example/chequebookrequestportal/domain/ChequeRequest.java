@@ -33,6 +33,9 @@ public class ChequeRequest extends BaseEntity {
     @Convert(converter = ChequeTypeConverter.class)
     @Column(name = "cheque_type_code", length = 2)
     private ChequeType chequeType;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "debit_policy", length = 30)
+    private DebitPolicy debitPolicy = DebitPolicy.CUSTOMER_DEBIT;
     @Column(nullable = false, length = 3)
     private String currency;
     @Column(name = "account_home_branch_code", length = 20)
@@ -98,6 +101,8 @@ public class ChequeRequest extends BaseEntity {
         this.acctOwnership = acctOwnership;
         this.schemeCode = schemeCode;
         this.chequeType = chequeType;
+        this.debitPolicy = chequeType != null && !chequeType.requiresCustomerDebit()
+                ? DebitPolicy.NOT_REQUIRED : DebitPolicy.CUSTOMER_DEBIT;
         this.currency = currency;
         this.accountHomeBranchCode = accountHomeBranchCode;
         this.accountHomeBranchName = accountHomeBranchName;
@@ -165,6 +170,14 @@ public class ChequeRequest extends BaseEntity {
 
     public ChequeType getChequeType() {
         return chequeType;
+    }
+
+    public DebitPolicy getDebitPolicy() {
+        return debitPolicy == null ? DebitPolicy.CUSTOMER_DEBIT : debitPolicy;
+    }
+
+    public boolean requiresCustomerDebit() {
+        return getDebitPolicy() == DebitPolicy.CUSTOMER_DEBIT;
     }
 
     public String getCurrency() {

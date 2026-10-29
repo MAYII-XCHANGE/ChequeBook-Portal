@@ -41,4 +41,18 @@ describe('request report CSV', () => {
     expect(csv).toContain('"CSO User"');
     expect(csv).toContain('"1075.00"');
   });
+
+  it('omits the Finacle registration column in manual printing mode', () => {
+    const csv = buildRequestReportCsv([{
+      id: 'CBR-2026-000029',
+      customer: 'Customer',
+      finacleRegistrationEnabled: false,
+      status: 'PRINTED',
+    }]);
+
+    expect(csv).not.toContain('Finacle Registration Status');
+    expect(csv).not.toContain('Starting Cheque Number');
+    expect(csv).not.toContain('Ending Cheque Number');
+    expect(csv).toContain('Vendor Reference,Domicile Branch');
+  });
 });

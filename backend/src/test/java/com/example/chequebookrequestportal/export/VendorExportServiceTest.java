@@ -2,6 +2,7 @@ package com.example.chequebookrequestportal.export;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.doThrow;
@@ -16,6 +17,7 @@ import com.example.chequebookrequestportal.common.ApiException;
 import com.example.chequebookrequestportal.common.Permissions;
 import com.example.chequebookrequestportal.domain.ChequeRequest;
 import com.example.chequebookrequestportal.domain.ChequeType;
+import com.example.chequebookrequestportal.domain.DebitStatus;
 import com.example.chequebookrequestportal.domain.RequestHistory;
 import com.example.chequebookrequestportal.domain.RequestStatus;
 import com.example.chequebookrequestportal.domain.StaffUser;
@@ -42,10 +44,12 @@ class VendorExportServiceTest {
     private VendorExportBatchRepository batches;
     private VendorExportItemRepository items;
     private ChequeRequestRepository requests;
+    private ChargeTransactionRepository charges;
     private RequestHistoryRepository history;
     private SecurityService security;
     private AuditService audit;
     private VendorExportService service;
+    private VendorWorkflowProperties workflow;
     private StaffUser actor;
     private VendorExportBatch batch;
     private ChequeRequest first;
@@ -56,9 +60,11 @@ class VendorExportServiceTest {
         batches = mock(VendorExportBatchRepository.class);
         items = mock(VendorExportItemRepository.class);
         requests = mock(ChequeRequestRepository.class);
+        charges = mock(ChargeTransactionRepository.class);
         history = mock(RequestHistoryRepository.class);
         security = mock(SecurityService.class);
         audit = mock(AuditService.class);
+        workflow = mock(VendorWorkflowProperties.class);
         actor = new StaffUser("OPS-1", "operations@novabank.ng", "Operations User", null);
 
         batch = new VendorExportBatch(2, actor, ".pending-test.tmp");
@@ -83,23 +89,62 @@ class VendorExportServiceTest {
                 batches,
                 items,
                 requests,
-                mock(ChargeTransactionRepository.class),
+                charges,
                 history,
                 security,
                 audit,
                 "build/test-vendor-exports",
                 "001",
                 "Head Office",
-                "");
+                "",
+                workflow);
     }
 
     @Test
-    void manualPrintConfirmationIsReplacedByTheVendorResponse() {
+    void confirmsPrintingForTheCompleteBatchWhenFinacleRegistrationIsDisabled() {
+        service.confirmPrinted(BATCH_NUMBER);
+
+        assertEquals(VendorExportBatch.STATUS_PRINTED, batch.getStatus());
+        assertEquals(RequestStatus.PRINTED, first.getStatus());
+        assertEquals(RequestStatus.PRINTED, second.getStatus());
+        verify(history, times(2)).save(any(RequestHistory.class));
+        verify(audit).record("VENDOR_BATCH_PRINTED", "VENDOR_EXPORT", BATCH_NUMBER,
+                "Marked 2 request(s) as printed.");
+    }
+
+    @Test
+    void requiresTheVendorResponseWhenFinacleRegistrationIsEnabled() {
+        when(workflow.finacleRegistrationEnabled()).thenReturn(true);
+
         ApiException exception = assertThrows(ApiException.class, () -> service.confirmPrinted(BATCH_NUMBER));
 
         assertEquals(HttpStatus.CONFLICT, exception.getStatus());
         assertEquals("VENDOR_PRINT_RESPONSE_REQUIRED", exception.getCode());
         assertEquals(VendorExportBatch.STATUS_SENT, batch.getStatus());
+        assertEquals(RequestStatus.SENT_TO_VENDOR, first.getStatus());
+        verify(history, never()).save(any());
+    }
+
+    @Test
+    void validatesEveryRequestBeforeChangingAnyRequest() {
+        second.setStatus(RequestStatus.PRINTED);
+
+        ApiException exception = assertThrows(ApiException.class, () -> service.confirmPrinted(BATCH_NUMBER));
+
+        assertEquals("INVALID_STATUS_TRANSITION", exception.getCode());
+        assertEquals(VendorExportBatch.STATUS_SENT, batch.getStatus());
+        assertEquals(RequestStatus.SENT_TO_VENDOR, first.getStatus());
+        verify(history, never()).save(any());
+    }
+
+    @Test
+    void rejectsABatchThatHasNotBeenSent() {
+        ReflectionTestUtils.setField(batch, "status", VendorExportBatch.STATUS_EXPORTED);
+
+        ApiException exception = assertThrows(ApiException.class, () -> service.confirmPrinted(BATCH_NUMBER));
+
+        assertEquals(HttpStatus.CONFLICT, exception.getStatus());
+        assertEquals("INVALID_BATCH_STATUS", exception.getCode());
         assertEquals(RequestStatus.SENT_TO_VENDOR, first.getStatus());
         verify(history, never()).save(any());
     }
@@ -125,11 +170,37 @@ class VendorExportServiceTest {
     }
 
     @Test
+    void allowsManagersChequeToReachVendorExportWithoutADebitTransaction() {
+        ChequeRequest managersCheque = request(13L, "CBR-003", "1234567892", ChequeType.MANAGERS_CHEQUE);
+
+        assertEquals("03", service.requireChequeType(managersCheque));
+        org.junit.jupiter.api.Assertions.assertTrue(service.financiallyReady(managersCheque));
+        verify(charges, never()).existsByRequestRequestNumberAndStatus(any(), any(DebitStatus.class));
+    }
+
+    @Test
     void blocksLegacyRequestsWithoutAChequeType() {
         ApiException exception = assertThrows(ApiException.class, () -> service.requireChequeType(first));
 
         assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, exception.getStatus());
         assertEquals("CHEQUE_TYPE_REQUIRED", exception.getCode());
+    }
+
+    @Test
+    void omitsRangeColumnsFromVendorWorkbooksInManualMode() {
+        assertArrayEquals(new String[] { "S/N", "Account Number", "Account Name", "Branch Name",
+                "Branch Address", "Sort Code", "Cheque Type", "No of Leaves", "No of Booklets",
+                "Delivery SolID", "Delivery Address", "Scheme Code", "Currency" }, service.workbookHeaders());
+    }
+
+    @Test
+    void restoresRangeColumnsWhenFinacleRegistrationIsEnabled() {
+        when(workflow.finacleRegistrationEnabled()).thenReturn(true);
+
+        String[] headers = service.workbookHeaders();
+
+        assertEquals("Range Start", headers[headers.length - 2]);
+        assertEquals("Range Stop", headers[headers.length - 1]);
     }
 
     private ChequeRequest request(long id, String requestNumber, String accountNumber) {

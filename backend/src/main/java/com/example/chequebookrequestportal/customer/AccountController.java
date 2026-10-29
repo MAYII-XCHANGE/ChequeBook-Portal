@@ -2,6 +2,7 @@ package com.example.chequebookrequestportal.customer;
 
 import com.example.chequebookrequestportal.common.ApiException;
 import com.example.chequebookrequestportal.common.Permissions;
+import com.example.chequebookrequestportal.corebanking.managerscheque.ManagersChequeAccountService;
 import com.example.chequebookrequestportal.corebanking.dto.response.NameEnquiryResponse;
 import com.example.chequebookrequestportal.corebanking.service.CoreBankingService;
 import com.example.chequebookrequestportal.domain.Branch;
@@ -25,10 +26,47 @@ import org.springframework.web.bind.annotation.RestController;
 public class AccountController {
     private final CoreBankingService coreBanking;
     private final SecurityService security;
+    private final ManagersChequeAccountService managersChequeAccounts;
 
-    public AccountController(CoreBankingService coreBanking, SecurityService security) {
+    public AccountController(CoreBankingService coreBanking, SecurityService security,
+            ManagersChequeAccountService managersChequeAccounts) {
         this.coreBanking = coreBanking;
         this.security = security;
+        this.managersChequeAccounts = managersChequeAccounts;
+    }
+
+    @GetMapping("/managers-cheque")
+    @PreAuthorize("hasAuthority('CREATE_CHEQUE_REQUEST')")
+    Map<String, Object> managersChequeAccount() {
+        security.requirePermission(Permissions.CREATE_REQUEST);
+        Branch actorBranch = actorBranch();
+        String configuredAccount = actorBranch.getManagersChequeAccount();
+        if (!present(configuredAccount))
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "MANAGERS_CHEQUE_ACCOUNT_NOT_CONFIGURED",
+                    "A Manager's Cheque account has not been configured for your branch.");
+        if (!configuredAccount.matches("\\d{10}"))
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "MANAGERS_CHEQUE_CONFIGURATION_INVALID",
+                    "The configured Manager's Cheque account must contain exactly 10 digits.");
+
+        var details = managersChequeAccounts.resolve(configuredAccount, actorBranch.getCode());
+        Map<String, Object> account = new LinkedHashMap<>();
+        account.put("name", details.accountName());
+        account.put("accountNumber", details.accountNumber());
+        account.put("acctOwnership", details.accountOwnership());
+        account.put("schemeCode", details.schemeCode());
+        account.put("currency", details.currency());
+        account.put("accountHomeBranch", branchLabel(actorBranch.getName(), actorBranch.getCode()));
+        account.put("accountHomeBranchName", actorBranch.getName());
+        account.put("accountHomeBranchCode", actorBranch.getCode());
+        account.put("servicingBranch", branchLabel(actorBranch.getName(), actorBranch.getCode()));
+        account.put("servicingBranchName", actorBranch.getName());
+        account.put("servicingBranchCode", actorBranch.getCode());
+
+        Map<String, Object> validation = new LinkedHashMap<>();
+        validation.put("eligible", true);
+        validation.put("reason", null);
+        validation.put("checks", List.<Object[]>of(new Object[] { "Configured for initiating branch", true }));
+        return Map.of("customer", account, "eligibility", validation);
     }
 
     @GetMapping("/{accountNumber}/eligibility")
@@ -36,12 +74,11 @@ public class AccountController {
     Map<String, Object> eligibility(
             @PathVariable @jakarta.validation.constraints.Pattern(regexp = "\\d{10}") String accountNumber) {
         security.requirePermission(Permissions.CREATE_REQUEST);
-        StaffUser actor = security.user();
-        Branch actorBranch = actor.getBranch();
-        if (actorBranch == null)
-            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "USER_BRANCH_REQUIRED",
-                    "The initiating user must be assigned to a branch.");
+        Branch actorBranch = actorBranch();
+        return accountResult(accountNumber, actorBranch);
+    }
 
+    private Map<String, Object> accountResult(String accountNumber, Branch actorBranch) {
         NameEnquiryResponse account = coreBanking.nameEnquiry(accountNumber);
         String accountHomeBranchCode = nullable(account.branchCode());
         String accountHomeBranchName = nullable(account.branchName());
@@ -66,7 +103,6 @@ public class AccountController {
             checks.add(new Object[] { "No cheque restrictions", unrestricted });
             eligible &= unrestricted;
         }
-
         Map<String, Object> customer = new LinkedHashMap<>();
         customer.put("name", account.accountName());
         customer.put("accountNumber", fallback(account.accountNumber(), accountNumber));
@@ -96,6 +132,14 @@ public class AccountController {
         return Map.of("customer", customer, "eligibility", result);
     }
 
+    private Branch actorBranch() {
+        StaffUser actor = security.user();
+        if (actor.getBranch() == null)
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "USER_BRANCH_REQUIRED",
+                    "The initiating user must be assigned to a branch.");
+        return actor.getBranch();
+    }
+
     private boolean present(String value) {
         return value != null && !value.isBlank();
     }
@@ -120,4 +164,5 @@ public class AccountController {
         String normalized = value.trim();
         return normalized.substring(0, 1).toUpperCase() + normalized.substring(1).toLowerCase();
     }
+
 }

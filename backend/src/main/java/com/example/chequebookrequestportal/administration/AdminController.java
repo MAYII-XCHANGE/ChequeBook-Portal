@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -137,7 +138,9 @@ public class AdminController {
             @NotBlank @Size(max = 500) String address,
             @NotBlank @Size(max = 30) String sortCode,
             @NotBlank @Size(max = 30) String chargeGlAccount,
-            @NotBlank @Size(max = 30) String vatGlAccount) {
+            @NotBlank @Size(max = 30) String vatGlAccount,
+            @NotBlank @Pattern(regexp = "\\d{10}", message = "Manager's Cheque account must contain 10 digits.")
+            String managersChequeAccount) {
     }
 
     public record RoleAssignment(@NotEmpty Set<String> roles) {

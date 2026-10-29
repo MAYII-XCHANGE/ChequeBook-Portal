@@ -8,6 +8,7 @@ import com.example.chequebookrequestportal.notification.dto.NotificationSummaryR
 import com.example.chequebookrequestportal.repository.ChequeRequestRepository;
 import com.example.chequebookrequestportal.repository.VendorExportBatchRepository;
 import com.example.chequebookrequestportal.domain.VendorExportBatch;
+import com.example.chequebookrequestportal.export.VendorWorkflowProperties;
 import com.example.chequebookrequestportal.security.PortalPrincipal;
 import com.example.chequebookrequestportal.security.SecurityService;
 import java.time.Instant;
@@ -19,21 +20,17 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class NotificationService {
-    private static final EnumSet<RequestStatus> LIFECYCLE_UPDATE_STATUSES = EnumSet.of(
-            RequestStatus.FINACLE_REGISTERED,
-            RequestStatus.FINACLE_REGISTRATION_FAILED,
-            RequestStatus.FINACLE_REGISTRATION_REVIEW_REQUIRED
-    );
-
     private final ChequeRequestRepository requests;
     private final VendorExportBatchRepository batches;
     private final SecurityService security;
+    private final VendorWorkflowProperties vendorWorkflow;
 
     public NotificationService(ChequeRequestRepository requests, VendorExportBatchRepository batches,
-            SecurityService security) {
+            SecurityService security, VendorWorkflowProperties vendorWorkflow) {
         this.requests = requests;
         this.batches = batches;
         this.security = security;
+        this.vendorWorkflow = vendorWorkflow;
     }
 
     @Transactional(readOnly = true)
@@ -69,7 +66,7 @@ public class NotificationService {
 
         if (principal.permissions().contains(Permissions.PROCESS_REQUEST)) {
             add(actions, NotificationActionCode.LIFECYCLE_UPDATE_REQUIRED,
-                    requests.countProcessingQueue(LIFECYCLE_UPDATE_STATUSES, DebitStatus.SUCCESSFUL));
+                    requests.countProcessingQueue(lifecycleUpdateStatuses(), DebitStatus.SUCCESSFUL));
             add(actions, NotificationActionCode.REVERSAL_REVIEW_REQUIRED,
                     requests.countByStatus(RequestStatus.REVERSAL_REVIEW_REQUIRED));
         }
@@ -86,6 +83,13 @@ public class NotificationService {
 
         long totalCount = actions.stream().mapToLong(NotificationActionResponse::count).sum();
         return new NotificationSummaryResponse(totalCount, List.copyOf(actions), Instant.now());
+    }
+
+    private EnumSet<RequestStatus> lifecycleUpdateStatuses() {
+        if (!vendorWorkflow.finacleRegistrationEnabled())
+            return EnumSet.of(RequestStatus.PRINTED, RequestStatus.FINACLE_REGISTERED);
+        return EnumSet.of(RequestStatus.FINACLE_REGISTERED, RequestStatus.FINACLE_REGISTRATION_FAILED,
+                RequestStatus.FINACLE_REGISTRATION_REVIEW_REQUIRED);
     }
 
     private void add(List<NotificationActionResponse> actions, NotificationActionCode code, long count) {

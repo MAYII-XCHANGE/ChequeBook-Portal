@@ -7,7 +7,7 @@ import {
   Search,
   ShieldCheck,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Link } from "react-router-dom";
 import { Alert } from "../../components/ui/Alert";
@@ -26,7 +26,7 @@ import {
 } from "../../constants/workflow";
 import { formatBranch, maskAccount } from "../../utils/formatters";
 
-const steps = ["Account Search", "Eligibility", "Review & Submit"];
+const steps = ["Account Selection", "Validation", "Review & Submit"];
 
 function Progress({ current }) {
   return (
@@ -51,7 +51,7 @@ function Progress({ current }) {
   );
 }
 
-function CustomerSummary({ customer }) {
+function CustomerSummary({ customer, managersCheque = false }) {
   const accountHomeBranch = formatBranch(
     customer.accountHomeBranchName ?? customer.branchName,
     customer.accountHomeBranchCode ?? customer.branchCode,
@@ -63,14 +63,19 @@ function CustomerSummary({ customer }) {
     customer.servicingBranch,
   );
   const details = [
-    ["Customer name", customer.name],
+    [managersCheque ? "Account name" : "Customer name", customer.name],
     ["Account number", maskAccount(customer.accountNumber)],
     ["Account type", customer.acctOwnership],
     // ["Account status", customer.accountStatus],
     ["Domicile Branch", accountHomeBranch],
     ["Initiating Branch", servicingBranch],
-    ["KYC status", customer.kycLevel],
-    ["Restrictions", customer.restrictions],
+    ...(managersCheque ? [
+      ["Scheme code", customer.schemeCode],
+      ["Currency", customer.currency],
+    ] : [
+      ["KYC status", customer.kycLevel],
+      ["Restrictions", customer.restrictions],
+    ]),
   ];
   return (
     <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -96,6 +101,7 @@ export function NewRequestPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState(null);
+  const lookupSequence = useRef(0);
   const current = created
     ? 3
     : result
@@ -105,31 +111,57 @@ export function NewRequestPage() {
       : 0;
   const lookup = async (event) => {
     event.preventDefault();
+    const lookupId = ++lookupSequence.current;
     setLookupError("");
     setResult(null);
     setLeafCount(null);
-    setChequeType("");
+    if (!chequeType) {
+      setLookupError("Select a cheque type before searching for the account.");
+      return;
+    }
     if (!/^\d{10}$/.test(accountNumber)) {
       setLookupError("Enter a valid 10-digit account number.");
       return;
     }
     setSearching(true);
     try {
-      setResult(await customerApi.getCustomerByAccount(accountNumber));
+      const response = await customerApi.getCustomerByAccount(accountNumber, chequeType);
+      if (lookupId === lookupSequence.current) setResult(response);
     } catch (error) {
-      setLookupError(error.message);
+      if (lookupId === lookupSequence.current) setLookupError(error.message);
     } finally {
-      setSearching(false);
+      if (lookupId === lookupSequence.current) setSearching(false);
+    }
+  };
+  const selectChequeType = async (nextType) => {
+    const lookupId = ++lookupSequence.current;
+    setChequeType(nextType);
+    setAccountNumber("");
+    setResult(null);
+    setLeafCount(null);
+    setLookupError("");
+    setSearching(false);
+    if (nextType !== "03") return;
+
+    setSearching(true);
+    try {
+      const response = await customerApi.getManagersChequeAccount();
+      if (lookupId === lookupSequence.current) {
+        setResult(response);
+        setAccountNumber(response.customer.accountNumber);
+      }
+    } catch (error) {
+      if (lookupId === lookupSequence.current) setLookupError(error.message);
+    } finally {
+      if (lookupId === lookupSequence.current) setSearching(false);
     }
   };
   const submit = async () => {
     setSubmitting(true);
     try {
-      const response = await chequeRequestApi.createRequest({
-        accountNumber: result.customer.accountNumber,
-        leafCount,
-        chequeType,
-      });
+      const request = { leafCount, chequeType };
+      if (chequeType !== "03") request.accountNumber = result.customer.accountNumber;
+      const response = await chequeRequestApi.createRequest(request);
       setCreated(response.request);
       setConfirmOpen(false);
       toast.success(`${response.request.id} submitted successfully.`);
@@ -142,8 +174,11 @@ export function NewRequestPage() {
     }
   };
   const reset = () => {
+    lookupSequence.current += 1;
     setAccountNumber("");
     setResult(null);
+    setLookupError("");
+    setSearching(false);
     setLeafCount(null);
     setChequeType("");
     setCreated(null);
@@ -205,49 +240,87 @@ export function NewRequestPage() {
       <PageHeader
         eyebrow="Branch request"
         title="New Chequebook Request"
-        description="Retrieve the customer account and display backend eligibility before submitting a request."
+        description="Retrieve the account and display backend eligibility before submitting a request."
       />
       <Card className="p-5 sm:p-6">
         <Progress current={current} />
-        <form onSubmit={lookup} className="max-w-3xl">
+        <form onSubmit={lookup} className="max-w-3xl space-y-5">
           <FormField
-            label="Customer Account Number"
-            htmlFor="account-number"
+            label="Cheque type"
+            htmlFor="cheque-type"
             required
-            error={lookupError}
+            hint="Select the cheque type before retrieving the account."
           >
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                id="account-number"
-                inputMode="numeric"
-                maxLength={10}
-                className={`${inputClass} font-mono tracking-wider`}
-                placeholder="Enter 10-digit account number"
-                value={accountNumber}
-                onChange={(e) =>
-                  setAccountNumber(e.target.value.replace(/\D/g, ""))
-                }
-              />
-              <Button type="submit" loading={searching} className="sm:min-w-28">
-                <Search className="h-4 w-4" />
-                {searching ? "Searching…" : "Search"}
-              </Button>
-            </div>
+            <select
+              id="cheque-type"
+              className={inputClass}
+              value={chequeType}
+              onChange={(event) => selectChequeType(event.target.value)}
+              required
+            >
+              <option value="">Select cheque type</option>
+              {CHEQUE_TYPE_OPTIONS.map((type) => (
+                <option key={type.code} value={type.code}>
+                  {type.code} — {type.label}
+                </option>
+              ))}
+            </select>
           </FormField>
+          {chequeType !== "03" && (
+            <FormField
+              label="Customer Account Number"
+              htmlFor="account-number"
+              required
+              error={lookupError}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  id="account-number"
+                  inputMode="numeric"
+                  maxLength={10}
+                  className={`${inputClass} font-mono tracking-wider`}
+                  placeholder="Enter 10-digit account number"
+                  value={accountNumber}
+                  onChange={(e) =>
+                    setAccountNumber(e.target.value.replace(/\D/g, ""))
+                  }
+                />
+                <Button type="submit" loading={searching} className="sm:min-w-28">
+                  <Search className="h-4 w-4" />
+                  {searching ? "Searching…" : "Search"}
+                </Button>
+              </div>
+            </FormField>
+          )}
+          {chequeType === "03" && searching && (
+            <Alert variant="info" title="Loading configured account">
+              Retrieving your branch's Manager's Cheque account from the backend.
+            </Alert>
+          )}
+          {chequeType === "03" && lookupError && (
+            <Alert variant="error" title="Manager's Cheque account unavailable">
+              {lookupError}
+            </Alert>
+          )}
         </form>
         {result && (
           <div className="mt-7 space-y-6">
             <Card className="shadow-none">
               <CardHeader
-                title="Customer information"
-                description="Retrieved from the core banking service"
+                title={chequeType === "03" ? "Manager's Cheque account information" : "Customer information"}
+                description={chequeType === "03"
+                  ? "Verified in Finacle using your assigned branch configuration"
+                  : "Retrieved from the core banking service"}
               />
               <div className="p-5">
-                <CustomerSummary customer={result.customer} />
+                <CustomerSummary customer={result.customer} managersCheque={chequeType === "03"} />
               </div>
             </Card>
             {result.eligibility.eligible ? (
-              <Alert variant="success" title="Customer is eligible">
+              <Alert
+                variant="success"
+                title={chequeType === "03" ? "Configured account loaded" : "Customer is eligible"}
+              >
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {result.eligibility.checks.map(([label, pass]) => (
                     <span
@@ -287,30 +360,15 @@ export function NewRequestPage() {
               <Card className="shadow-none">
                 <CardHeader
                   title="Request details"
-                  description="Select the cheque type and required chequebook size."
+                  description="Select the required chequebook size."
                 />
                 <div className="space-y-6 p-5">
-                  <FormField
-                    label="Cheque type"
-                    htmlFor="cheque-type"
-                    required
-                    hint="Select the customer cheque type confirmed for this request."
-                  >
-                    <select
-                      id="cheque-type"
-                      className={inputClass}
-                      value={chequeType}
-                      onChange={(event) => setChequeType(event.target.value)}
-                      required
-                    >
-                      <option value="">Select cheque type</option>
-                      {CHEQUE_TYPE_OPTIONS.map((type) => (
-                        <option key={type.code} value={type.code}>
-                          {type.code} — {type.label}
-                        </option>
-                      ))}
-                    </select>
-                  </FormField>
+                  {chequeType === "03" && (
+                    <Alert variant="info" title="Manager's Cheque account">
+                      This account was selected automatically from your assigned branch configuration.
+                      No customer debit will be performed after BOM approval.
+                    </Alert>
+                  )}
                   <fieldset>
                     <legend className="text-sm font-semibold text-slate-700">
                       Number of leaves{" "}
@@ -382,7 +440,7 @@ export function NewRequestPage() {
           </>
         }
       >
-        <CustomerSummary customer={result?.customer || {}} />
+        <CustomerSummary customer={result?.customer || {}} managersCheque={chequeType === "03"} />
         <div className="mt-5 grid gap-4 rounded-md bg-slate-50 p-4 sm:grid-cols-2">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -403,8 +461,9 @@ export function NewRequestPage() {
         </div>
         <Alert variant="info" title="Before you submit">
           <p>
-            The backend will remain the authority for duplicate prevention,
-            eligibility and the final request identifier.
+            {chequeType === "03"
+              ? "The backend will verify that this is your branch's configured Manager's Cheque account. No customer debit will be performed after BOM approval."
+              : "The backend will remain the authority for duplicate prevention, eligibility and the final request identifier."}
           </p>
         </Alert>
       </Modal>

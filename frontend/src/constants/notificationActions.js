@@ -28,7 +28,7 @@ export const NOTIFICATION_ACTIONS = {
     path: "/vendor-exports",
   },
   [NOTIFICATION_ACTION_CODES.VENDOR_PRINT_REQUIRED]: {
-    label: "Vendor batches awaiting print-response upload",
+    label: "Vendor printing confirmation required",
     path: "/vendor-exports",
   },
   [NOTIFICATION_ACTION_CODES.LIFECYCLE_UPDATE_REQUIRED]: {

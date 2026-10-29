@@ -42,6 +42,11 @@ public class VendorExportController {
         return service.list();
     }
 
+    @GetMapping("/capabilities")
+    Map<String, Object> capabilities() {
+        return service.capabilities();
+    }
+
     @PostMapping
     Map<String, Object> create(@Valid @RequestBody ExportInput i) {
         return service.create(i.requestIds());

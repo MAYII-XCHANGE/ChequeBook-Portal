@@ -6,9 +6,17 @@ import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 
 public interface BranchRepository extends JpaRepository<Branch, Long> {
     Optional<Branch> findByCodeIgnoreCase(String code);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select branch from Branch branch where lower(branch.code) = lower(:code)")
+    Optional<Branch> findByCodeForUpdate(@Param("code") String code);
+
+    Optional<Branch> findByManagersChequeAccount(String managersChequeAccount);
 
     @Query("""
             select branch from Branch branch

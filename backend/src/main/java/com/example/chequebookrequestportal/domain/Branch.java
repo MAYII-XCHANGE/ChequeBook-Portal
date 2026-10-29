@@ -9,7 +9,8 @@ import jakarta.persistence.UniqueConstraint;
 @Table(name = "cheque_branches", uniqueConstraints = {
         @UniqueConstraint(name = "uk_branch_code", columnNames = "code"),
         @UniqueConstraint(name = "uk_branch_charge_gl", columnNames = "charge_gl_account"),
-        @UniqueConstraint(name = "uk_branch_vat_gl", columnNames = "vat_gl_account")
+        @UniqueConstraint(name = "uk_branch_vat_gl", columnNames = "vat_gl_account"),
+        @UniqueConstraint(name = "uk_branch_managers_cheque_account", columnNames = "managers_cheque_account")
 })
 public class Branch extends BaseEntity {
     @Column(nullable = false, length = 20)
@@ -24,6 +25,8 @@ public class Branch extends BaseEntity {
     private String chargeGlAccount;
     @Column(name = "vat_gl_account", length = 30)
     private String vatGlAccount;
+    @Column(name = "managers_cheque_account", length = 10)
+    private String managersChequeAccount;
     @Column(nullable = false)
     private boolean active = true;
     @Column(nullable = false)
@@ -34,17 +37,23 @@ public class Branch extends BaseEntity {
 
     public Branch(String code, String name, String address, String sortCode, String chargeGlAccount,
             String vatGlAccount) {
-        this(code, name, address, sortCode, chargeGlAccount, vatGlAccount, false);
+        this(code, name, address, sortCode, chargeGlAccount, vatGlAccount, null, false);
     }
 
     public Branch(String code, String name, String address, String sortCode, String chargeGlAccount,
             String vatGlAccount, boolean systemDefined) {
+        this(code, name, address, sortCode, chargeGlAccount, vatGlAccount, null, systemDefined);
+    }
+
+    public Branch(String code, String name, String address, String sortCode, String chargeGlAccount,
+            String vatGlAccount, String managersChequeAccount, boolean systemDefined) {
         this.code = code;
         this.name = name;
         this.address = address;
         this.sortCode = sortCode;
         this.chargeGlAccount = chargeGlAccount;
         this.vatGlAccount = vatGlAccount;
+        this.managersChequeAccount = managersChequeAccount;
         this.systemDefined = systemDefined;
     }
 
@@ -72,6 +81,10 @@ public class Branch extends BaseEntity {
         return vatGlAccount;
     }
 
+    public String getManagersChequeAccount() {
+        return managersChequeAccount;
+    }
+
     public boolean isActive() {
         return active;
     }
@@ -81,11 +94,17 @@ public class Branch extends BaseEntity {
     }
 
     public void update(String name, String address, String sortCode, String chargeGlAccount, String vatGlAccount) {
+        update(name, address, sortCode, chargeGlAccount, vatGlAccount, managersChequeAccount);
+    }
+
+    public void update(String name, String address, String sortCode, String chargeGlAccount, String vatGlAccount,
+            String managersChequeAccount) {
         this.name = name;
         this.address = address;
         this.sortCode = sortCode;
         this.chargeGlAccount = chargeGlAccount;
         this.vatGlAccount = vatGlAccount;
+        this.managersChequeAccount = managersChequeAccount;
     }
 
     public void setActive(boolean active) {

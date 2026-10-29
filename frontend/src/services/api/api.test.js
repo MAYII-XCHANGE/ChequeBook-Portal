@@ -52,6 +52,26 @@ describe('API contracts', () => {
     await expect(customerApi.getCustomerByAccount('0098765432')).resolves.toEqual(payload);
   });
 
+  it("retrieves the authenticated branch's configured Manager's Cheque account", async () => {
+    const payload = { eligibility: { eligible: true, checks: [] } };
+    mockApi.onGet('/accounts/managers-cheque').reply(200, payload);
+
+    await expect(customerApi.getManagersChequeAccount()).resolves.toEqual(payload);
+    expect(mockApi.history.get[0].url).toBe('/accounts/managers-cheque');
+  });
+
+  it("does not submit an account number for a Manager's Cheque request", async () => {
+    mockApi.onPost('/cheque-requests').reply(200, { request: { id: 'CBR-003' } });
+
+    await chequeRequestApi.createRequest({
+      accountNumber: 'client-supplied-value',
+      leafCount: 50,
+      chequeType: '03',
+    });
+
+    expect(JSON.parse(mockApi.history.post[0].data)).toEqual({ leafCount: 50, chequeType: '03' });
+  });
+
   it('normalizes backend account errors', async () => {
     mockApi.onGet('/accounts/1111111111/eligibility').reply(
       404,
@@ -159,6 +179,16 @@ describe('API contracts', () => {
 
     expect(mockApi.history.post[0].url).toBe('/vendor-exports/VEX-2026%2F001/print-response');
     expect(JSON.parse(mockApi.history.post[0].data)).toEqual({ rows });
+  });
+
+  it('confirms printing through the encoded batch endpoint', async () => {
+    mockApi.onPost('/vendor-exports/VEX-2026%2F001/confirm-printed').reply(200, {
+      batchNumber: 'VEX-2026/001', status: 'PRINTED',
+    });
+
+    await exportApi.confirmPrinted('VEX-2026/001');
+
+    expect(mockApi.history.post[0].url).toBe('/vendor-exports/VEX-2026%2F001/confirm-printed');
   });
 
   it('uploads an Excel vendor response as multipart form data', async () => {

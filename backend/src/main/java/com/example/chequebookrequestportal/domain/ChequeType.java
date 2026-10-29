@@ -5,7 +5,8 @@ import java.util.Arrays;
 /** Cheque types currently supported by the portal and vendor interface. */
 public enum ChequeType {
     INDIVIDUAL_CURRENT("01", "Individual Current Account"),
-    CORPORATE("02", "Corporate Account");
+    CORPORATE("02", "Corporate Account"),
+    MANAGERS_CHEQUE("03", "Manager's Cheque");
 
     private final String code;
     private final String label;
@@ -25,6 +26,10 @@ public enum ChequeType {
 
     public String displayName() {
         return code + " — " + label;
+    }
+
+    public boolean requiresCustomerDebit() {
+        return this != MANAGERS_CHEQUE;
     }
 
     public static ChequeType fromCode(String code) {

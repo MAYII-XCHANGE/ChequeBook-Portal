@@ -174,7 +174,7 @@ public class AdminService {
     @CacheEvict(value = {CacheConfig.BRANCHES, CacheConfig.USERS, CacheConfig.PROFILES}, allEntries = true)
     public Map<String, Object> createBranch(AdminController.BranchInput input) {
         assertAdministrator();
-        assertBranchGlAccounts(input, null);
+        assertBranchAccounts(input, null);
         if (branches.findByCodeIgnoreCase(input.code().trim()).isPresent()) {
             throw new ApiException(HttpStatus.CONFLICT, "BRANCH_CODE_EXISTS",
                     "A branch with this code already exists.");
@@ -182,7 +182,8 @@ public class AdminService {
         Branch branch = branches
                 .save(new Branch(input.code().trim(), input.name().trim(), input.address().trim(),
                         input.sortCode().trim(),
-                        normalizeGlAccount(input.chargeGlAccount()), normalizeGlAccount(input.vatGlAccount())));
+                        normalizeGlAccount(input.chargeGlAccount()), normalizeGlAccount(input.vatGlAccount()),
+                        input.managersChequeAccount().trim(), false));
         audit.record("BRANCH_CREATED", "BRANCH", String.valueOf(branch.getId()),
                 "Branch created: " + branch.getCode() + ".");
         return branchMap(branch);
@@ -194,10 +195,11 @@ public class AdminService {
         assertAdministrator();
         Branch branch = branches.findById(id).orElseThrow(() -> notFound("Branch"));
         assertBranchIsUserManaged(branch);
-        assertBranchGlAccounts(input, id);
+        assertBranchAccounts(input, id);
         List<String> changes = branchChanges(branch, input);
         branch.update(input.name().trim(), input.address().trim(), input.sortCode().trim(),
-                normalizeGlAccount(input.chargeGlAccount()), normalizeGlAccount(input.vatGlAccount()));
+                normalizeGlAccount(input.chargeGlAccount()), normalizeGlAccount(input.vatGlAccount()),
+                input.managersChequeAccount().trim());
         audit.record("BRANCH_UPDATED", "BRANCH", String.valueOf(id),
                 "Branch details updated: " + branch.getCode() + ".");
         administrationEmail.branchModified(branch, changes, security.actor());
@@ -275,7 +277,7 @@ public class AdminService {
         }
     }
 
-    private void assertBranchGlAccounts(AdminController.BranchInput input, Long currentBranchId) {
+    private void assertBranchAccounts(AdminController.BranchInput input, Long currentBranchId) {
         String chargeGlAccount = normalizeGlAccount(input.chargeGlAccount());
         String vatGlAccount = normalizeGlAccount(input.vatGlAccount());
         if (chargeGlAccount.equals(vatGlAccount)) {
@@ -287,6 +289,11 @@ public class AdminService {
             throw new ApiException(HttpStatus.CONFLICT, "BRANCH_GL_ACCOUNT_EXISTS",
                     "Each branch must use its own charge GL and VAT GL accounts.");
         }
+        branches.findByManagersChequeAccount(input.managersChequeAccount().trim()).ifPresent(branch -> {
+            if (currentBranchId == null || !currentBranchId.equals(branch.getId()))
+                throw new ApiException(HttpStatus.CONFLICT, "MANAGERS_CHEQUE_ACCOUNT_EXISTS",
+                        "The Manager's Cheque account is already assigned to another branch.");
+        });
     }
 
     private boolean glAccountUsedByAnotherBranch(String account, Long currentBranchId) {
@@ -307,6 +314,8 @@ public class AdminService {
                 normalizeGlAccount(input.chargeGlAccount()));
         addChange(changes, "VAT GL account updated", branch.getVatGlAccount(),
                 normalizeGlAccount(input.vatGlAccount()));
+        addChange(changes, "Manager's Cheque account updated", branch.getManagersChequeAccount(),
+                input.managersChequeAccount().trim());
         return changes;
     }
 
@@ -395,6 +404,8 @@ public class AdminService {
         result.put("sortCode", branch.getSortCode() == null ? "" : branch.getSortCode());
         result.put("chargeGlAccount", branch.getChargeGlAccount() == null ? "" : branch.getChargeGlAccount());
         result.put("vatGlAccount", branch.getVatGlAccount() == null ? "" : branch.getVatGlAccount());
+        result.put("managersChequeAccount",
+                branch.getManagersChequeAccount() == null ? "" : branch.getManagersChequeAccount());
         result.put("active", branch.isActive());
         result.put("systemDefined", branch.isSystemDefined());
         result.put("createdAt", branch.getCreatedAt());

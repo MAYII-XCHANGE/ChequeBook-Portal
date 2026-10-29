@@ -3,6 +3,7 @@ package com.example.chequebookrequestportal.repository;
 import com.example.chequebookrequestportal.domain.ChequeRequest;
 import com.example.chequebookrequestportal.domain.DebitStatus;
 import com.example.chequebookrequestportal.domain.RequestStatus;
+import com.example.chequebookrequestportal.domain.ChequeType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -24,6 +25,9 @@ public interface ChequeRequestRepository
 
     boolean existsByAccountNumberAndStatusNotIn(String accountNumber, Collection<RequestStatus> statuses);
 
+    boolean existsByBranchCodeIgnoreCaseAndChequeTypeAndStatusNotIn(String branchCode, ChequeType chequeType,
+            Collection<RequestStatus> statuses);
+
     List<ChequeRequest> findByStatusAndBranchCodeIgnoreCaseOrderByCreatedAtAsc(RequestStatus status,
             String branchCode);
 
@@ -34,10 +38,10 @@ public interface ChequeRequestRepository
     @Query("""
             select request from ChequeRequest request
             where request.status in :statuses
-              and exists (
+              and (request.debitPolicy = com.example.chequebookrequestportal.domain.DebitPolicy.NOT_REQUIRED or exists (
                   select charge.id from ChargeTransaction charge
                   where charge.request = request and charge.status = :debitStatus
-              )
+              ))
             order by request.createdAt asc
             """)
     List<ChequeRequest> findProcessingQueue(@Param("statuses") Collection<RequestStatus> statuses,
@@ -48,10 +52,10 @@ public interface ChequeRequestRepository
     @Query("""
             select count(request) from ChequeRequest request
             where request.status in :statuses
-              and exists (
+              and (request.debitPolicy = com.example.chequebookrequestportal.domain.DebitPolicy.NOT_REQUIRED or exists (
                   select charge.id from ChargeTransaction charge
                   where charge.request = request and charge.status = :debitStatus
-              )
+              ))
             """)
     long countProcessingQueue(@Param("statuses") Collection<RequestStatus> statuses,
             @Param("debitStatus") DebitStatus debitStatus);
@@ -59,10 +63,10 @@ public interface ChequeRequestRepository
     @Query("""
             select request from ChequeRequest request
             where request.status = :status
-              and exists (
+              and (request.debitPolicy = com.example.chequebookrequestportal.domain.DebitPolicy.NOT_REQUIRED or exists (
                   select charge.id from ChargeTransaction charge
                   where charge.request = request and charge.status = :debitStatus
-              )
+              ))
               and not exists (
                   select item.id from VendorExportItem item where item.request = request
               )
@@ -74,10 +78,10 @@ public interface ChequeRequestRepository
     @Query("""
             select count(request) from ChequeRequest request
             where request.status = :status
-              and exists (
+              and (request.debitPolicy = com.example.chequebookrequestportal.domain.DebitPolicy.NOT_REQUIRED or exists (
                   select charge.id from ChargeTransaction charge
                   where charge.request = request and charge.status = :debitStatus
-              )
+              ))
               and not exists (
                   select item.id from VendorExportItem item where item.request = request
               )

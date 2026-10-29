@@ -102,6 +102,7 @@ public class RequestResponseLoggingFilter extends OncePerRequestFilter {
                 .replaceAll("(?i)\"newPassword\"\\s*:\\s*\"[^\"]*\"", "\"newPassword\":\"***\"")
                 .replaceAll("(?i)\"token\"\\s*:\\s*\"[^\"]*\"", "\"token\":\"***\"")
                 .replaceAll("(?i)\"challengeId\"\\s*:\\s*\"[^\"]*\"", "\"challengeId\":\"***\"")
+                .replaceAll("(?i)\"accountNumber\"\\s*:\\s*\"[^\"]*\"", "\"accountNumber\":\"***\"")
                 .replaceAll("(?i)\"accessToken\"\\s*:\\s*\"[^\"]*\"", "\"accessToken\":\"***\"")
                 .replaceAll("(?i)\"refreshToken\"\\s*:\\s*\"[^\"]*\"", "\"refreshToken\":\"***\"");
     }
