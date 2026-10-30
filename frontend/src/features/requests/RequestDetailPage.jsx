@@ -99,7 +99,7 @@ export function RequestDetailPage() {
   const finishCompletion = () => {
     setDeliveryModalOpen(false);
     toast.success(isManagersCheque
-      ? `${request.id}: Managers Cheque custody confirmed.`
+      ? `${request.id}: Custody confirmed.`
       : `${request.id} marked as delivered.`);
     requestNotificationRefresh();
     navigate("/cheque-requests");

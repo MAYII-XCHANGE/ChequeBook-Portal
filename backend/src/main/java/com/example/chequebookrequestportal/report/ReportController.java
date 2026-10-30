@@ -197,7 +197,7 @@ public class ReportController {
             case "DISPATCHED" -> "Dispatched";
             case "RECEIVED_BY_BRANCH" -> "Received by branch";
             case "DELIVERED" -> "Delivered";
-            case "CUSTODY_CONFIRMED" -> "Managers Cheque custody confirmed";
+            case "CUSTODY_CONFIRMED" -> "Custody confirmed";
             case "CANCELLED" -> "Cancelled";
             default -> status;
         };
