@@ -9,7 +9,7 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss()],
     base,
     server: {
-      port: 5173, // change here back to 8080 for test environment
+      port: 8005, // change here back to 8080 for test environment
       // proxy: {
       //   "/api": {
       //     target: "http://10.0.240.73:8083",

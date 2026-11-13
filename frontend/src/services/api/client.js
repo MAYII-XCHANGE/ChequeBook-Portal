@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8083/api/v1';
+const API_URL = 'http://10.0.210.47:8083/api/v1';
 
 export const apiError = (code, message, retryable = false, fieldErrors = {}) =>
   Object.assign(new Error(message), { code, retryable, fieldErrors });
